@@ -165,50 +165,42 @@ class MySampler(Sampler):
         count_pval = dict_model_check["count_pval"] * 1
         y_copy = likelihood.y * 1
 
-        if self.stochastic:
-            dict_model_check["clppd_online"] *= count_pval / (count_pval + 1)
-            dict_model_check["clppd_online"] += np.exp(-nll_full) / (count_pval + 1)
+        dict_model_check["clppd_online"] *= count_pval / (count_pval + 1)
+        dict_model_check["clppd_online"] += np.exp(-nll_full) / (count_pval + 1)
 
-            y_rep = likelihood.sample_observation_model(
-                self.current["forward_map_evals"],
-                self.rng,
-            )
-            likelihood_rep = copy.deepcopy(likelihood)
-            likelihood_rep.y = y_rep * 1
+        y_rep = likelihood.sample_observation_model(
+            self.current["forward_map_evals"],
+            self.rng,
+        )
+        likelihood_rep = copy.deepcopy(likelihood)
+        likelihood_rep.y = y_rep * 1
 
-            assert np.allclose(likelihood.y, y_copy), "nooooo"
+        assert np.allclose(likelihood.y, y_copy), "nooooo"
 
-            nll_utils_rep = likelihood_rep.evaluate_all_nll_utils(
-                self.current["forward_map_evals"],
-                idx=None,
-                compute_derivatives=False,
-            )
-            nll_y_rep_full = likelihood_rep.neglog_pdf(
-                self.current["forward_map_evals"],
-                nll_utils_rep,
-                full=True,
-            )
+        nll_utils_rep = likelihood_rep.evaluate_all_nll_utils(
+            self.current["forward_map_evals"],
+            idx=None,
+            compute_derivatives=False,
+        )
+        nll_y_rep_full = likelihood_rep.neglog_pdf(
+            self.current["forward_map_evals"],
+            nll_utils_rep,
+            full=True,
+        )
 
-            # p-value per (N, L) with y_rep_{n,ell} <= y_{n,ell}
-            dict_model_check["p_values_y"] *= count_pval / (count_pval + 1)
-            dict_model_check["p_values_y"] += (y_rep <= likelihood.y) / (count_pval + 1)
+        # p-value per (N, L) with y_rep_{n,ell} <= y_{n,ell}
+        dict_model_check["p_values_y"] *= count_pval / (count_pval + 1)
+        dict_model_check["p_values_y"] += (y_rep <= likelihood.y) / (count_pval + 1)
 
-            # p-value per (N,) with
-            # p(y_rep_n \vert theta_n) <= p(y_n \vert theta_n)
-            nll_y = np.sum(nll_full, axis=1)  # (N,)
-            nll_y_rep = np.sum(nll_y_rep_full, axis=1)  # (N,)
+        # p-value per (N,) with
+        # p(y_rep_n \vert theta_n) <= p(y_n \vert theta_n)
+        nll_y = np.sum(nll_full, axis=1)  # (N,)
+        nll_y_rep = np.sum(nll_y_rep_full, axis=1)  # (N,)
 
-            dict_model_check["p_values_llh"] *= count_pval / (count_pval + 1)
-            dict_model_check["p_values_llh"] += (nll_y_rep >= nll_y) / (count_pval + 1)
+        dict_model_check["p_values_llh"] *= count_pval / (count_pval + 1)
+        dict_model_check["p_values_llh"] += (nll_y_rep >= nll_y) / (count_pval + 1)
 
-            dict_model_check["count_pval"] += 1
-
-        else:
-            if objective < dict_model_check["best_objective"]:
-                dict_model_check["best_objective"] = objective * 1
-                dict_model_check["clppd_online"] = np.exp(-nll_full)
-
-            # p-values are computed at the end of the optimisation process.
+        dict_model_check["count_pval"] += 1
 
         return dict_model_check
 
@@ -219,42 +211,7 @@ class MySampler(Sampler):
         forward_map_evals: dict,
         nll_full: np.ndarray,
     ) -> dict:
-        if not self.stochastic:
-            # optimization p-value computations on estimated \hat{\theta}
-            for count_pval in tqdm(range(self.ESS_OPTIM)):
-                y_rep = likelihood.sample_observation_model(
-                    forward_map_evals,
-                    self.rng,
-                )
-                likelihood_rep = copy.deepcopy(likelihood)
-                likelihood_rep.y = y_rep * 1
-                nll_utils_rep = likelihood_rep.evaluate_all_nll_utils(
-                    forward_map_evals,
-                    idx=None,
-                    compute_derivatives=False,
-                )
-                nll_y_rep_full = likelihood_rep.neglog_pdf(
-                    forward_map_evals,
-                    nll_utils_rep,
-                    full=True,
-                )
-
-                # p-value per (N, L) with y_rep_{n,ell} <= y_{n,ell}
-                dict_model_check["p_values_y"] *= count_pval / (count_pval + 1)
-                dict_model_check["p_values_y"] += (y_rep <= likelihood.y) / (
-                    count_pval + 1
-                )
-
-                # p-value per (N,) with
-                # p(y_rep_n \vert theta_n) <= p(y_n \vert theta_n)
-                nll_y = np.sum(nll_full, axis=1)  # (N,)
-                nll_y_rep = np.sum(nll_y_rep_full, axis=1)  # (N,)
-
-                dict_model_check["p_values_llh"] *= count_pval / (count_pval + 1)
-                dict_model_check["p_values_llh"] += (nll_y_rep >= nll_y) / (
-                    count_pval + 1
-                )
-
+        
         # this p-value should be between 0 and 0.5
         dict_model_check["p_values_y"] = np.where(
             dict_model_check["p_values_y"] > 0.5,
@@ -272,7 +229,7 @@ class MySampler(Sampler):
         Theta_0: Optional[np.ndarray] = None,
         disable_progress_bar: bool = False,
         #
-        regu_spatial_N0: Union[int, float] = np.infty,
+        regu_spatial_N0: Union[int, float] = np.infty, # sets to infinity by default => no optimization of reg. params.
         regu_spatial_scale: float = 1.0,
         regu_spatial_vmin: float = 1e-8,
         regu_spatial_vmax: float = 1e8,
@@ -372,7 +329,7 @@ class MySampler(Sampler):
             homogeneity=2.0,
             exponent=0.8,
         )
-        optimize_regu_weights = regu_weights_optimizer.N0 < np.infty
+        optimize_regu_weights = regu_weights_optimizer.N0 < np.infty # the condition for optimization is simply based on the the input parameter regu_spatial_N0
 
         # clppd = computed log point-wise predictive density.
         # if self.stochastic : avg of all pred. likelihood terms (with burn-in)
@@ -421,7 +378,8 @@ class MySampler(Sampler):
 
                 additional_sampling_log["tau"] = posterior.prior_spatial.weights * 1
             # ------
-
+            
+            # --- RANDOM CHOICE PMA-LA / MTM ---
             type_t = np.argmax(
                 self.rng.multinomial(
                     1,
@@ -550,163 +508,6 @@ class MySampler(Sampler):
         )
         return
 
-    # def generate_new_sample_pmala_rmsprop(self, t, posterior):
-    #     """generates a new sample using the position-dependent MALA transition kernel
-
-    #     Parameters
-    #     ----------
-    #     t : int
-    #         current iteration index
-    #     score_model : ScoreModel
-    #         negative log posterior class
-
-    #     Returns
-    #     -------
-    #     accepted : bool
-    #         wether or not the candidate was accepted
-    #     log_proba_accept : float
-    #         log of the acceptance proba
-    #     """
-    #     grad_t = self.current["grad"].flatten()
-
-    #     # print(self.lambda_ + np.sqrt(self.v))
-    #     diag_G_t = 1 / (self.lambda_ + np.sqrt(self.v))
-
-    #     assert np.all(
-    #         diag_G_t > 0
-    #     ), f"{diag_G_t}, {self.lambda_ + np.sqrt(self.v)}, {self.v}"
-
-    #     # generate random
-    #     z_t = self.rng.standard_normal(size=self.N * self.D)
-    #     z_t *= np.sqrt(self.eps0 * diag_G_t)
-
-    #     # bias correction term
-    #     if self.compute_correction_term:
-    #         # recursive version
-    #         # correction = -1 / 2 * diag_G_t ** 2 / np.sqrt(self.v) * self.u
-
-    #         # only with corresponding term
-    #         hess_diag_t = self.current["hess_diag"].flatten()
-    #         correction = (
-    #             -(1 - self.alpha)
-    #             * self.alpha ** self.j_t
-    #             * (diag_G_t ** 2)
-    #             / np.sqrt(self.v)
-    #             * grad_t
-    #             * hess_diag_t
-    #         )
-    #         if np.sum(~np.isfinite(correction)) > 0:
-    #             print(
-    #                 f"num of nan in correction term: {np.sum(~np.isfinite(correction))}"
-    #             )
-    #         correction = np.nan_to_num(correction)  # ? nécessaire ?
-    #     else:
-    #         correction = np.zeros((self.N * self.D,))
-
-    #     # combination
-    #     mu_current = (
-    #         self.current["Theta"].flatten()
-    #         - self.eps0 / 2 * diag_G_t * grad_t
-    #         + self.eps0 * correction
-    #     )
-
-    #     if self.stochastic:
-    #         candidate = mu_current + z_t  # (N * D,)
-
-    #         log_q_candidate_given_current = -1 / 2 * np.sum(np.log(diag_G_t)) - 1 / (
-    #             2 * self.eps0
-    #         ) * np.sum((candidate - mu_current) ** 2 / diag_G_t)
-
-    #         # * compute log_q of candidate given current
-    #         candidate_all = posterior.compute_all(
-    #             candidate.reshape(self.N, self.D),
-    #         )
-    #         grad_cand = candidate_all["grad"].flatten()
-    #         v_cand = self.alpha * self.v + (1 - self.alpha) * grad_cand ** 2
-    #         diag_G_cand = 1 / (self.lambda_ + np.sqrt(v_cand))
-
-    #         if self.compute_correction_term:
-    #             hess_diag_cand = candidate_all["hess_diag"].flatten()
-
-    #             correction_cand = -(
-    #                 (1 - self.alpha)
-    #                 * diag_G_cand ** 2
-    #                 / np.sqrt(v_cand)
-    #                 * grad_cand
-    #                 * hess_diag_cand
-    #             )
-    #         else:
-    #             correction_cand = np.zeros((self.N * self.D,))
-
-    #         mu_cand = (
-    #             candidate
-    #             - self.eps0 / 2 * diag_G_cand * grad_cand
-    #             + self.eps0 * correction_cand
-    #         )
-
-    #         log_q_current_given_candidate = -1 / 2 * np.sum(np.log(diag_G_cand)) - 1 / (
-    #             2 * self.eps0
-    #         ) * np.sum((self.current["Theta"].flatten() - mu_cand) ** 2 / diag_G_cand)
-
-    #         # * compute proba accept
-    #         logpdf_current = -self.current["objective"] * 1
-    #         logpdf_candidate = -candidate_all["objective"] * 1
-
-    #         log_proba_accept = (
-    #             logpdf_candidate
-    #             - logpdf_current
-    #             + log_q_current_given_candidate
-    #             - log_q_candidate_given_current
-    #         )
-    #         log_u = np.log(self.rng.uniform(0, 1))
-    #         # print(
-    #         #     f"{log_u:.2e}, {log_proba_accept:.4e}, {logpdf_candidate:.4e},, {logpdf_current:.4e}, {log_q_current_given_candidate:.4e}, {log_q_candidate_given_current:.4e}"
-    #         # )
-
-    #         if log_u < log_proba_accept:
-    #             self.current = copy.copy(candidate_all)
-    #             self.v = v_cand * 1
-    #             assert np.sum(np.isnan(self.v)) == 0.0
-    #             assert np.sum(np.isinf(self.v)) == 0.0
-
-    #             self.j_t = np.zeros((self.N * self.D,))
-    #             return True, log_proba_accept
-    #         else:
-    #             self.j_t += 1
-    #             self.v = v_cand * 1
-    #             assert np.sum(np.isnan(self.v)) == 0.0
-    #             assert np.sum(np.isinf(self.v)) == 0.0
-    #             return False, log_proba_accept
-
-    #     # * in case we are doing optimization and not sampling
-    #     candidate_all = posterior.compute_all(mu_current.reshape((self.N, self.D)))
-    #     if candidate_all["objective"] < self.current["objective"]:
-    #         self.current = copy.copy(candidate_all)
-    #         accept = True
-    #         proba = 1
-    #     else:
-    #         candidate = mu_current + z_t  # (N * D,)
-    #         candidate_all = posterior.compute_all(candidate.reshape((self.N, self.D)))
-
-    #         if candidate_all["objective"] < self.current["objective"]:
-    #             self.current = copy.copy(candidate_all)
-    #             accept = True
-    #             proba = 1
-    #         else:
-    #             accept = False
-    #             proba = 0
-
-    #     grad_tp1 = candidate_all["grad"].flatten()
-    #     self.v = self.alpha * self.v + (1 - self.alpha) * grad_tp1 ** 2
-
-    #     assert np.sum(np.isnan(self.v)) == 0.0
-    #     assert (
-    #         np.sum(np.isinf(self.v)) == 0.0
-    #     ), f"{candidate_all['Theta']}, {candidate_all['grad']}"
-    #     assert np.sum(np.isnan(self.current["Theta"])) == 0.0
-
-    #     return accept, proba
-
     def generate_new_sample_pmala_rmsprop(self, t: int, posterior: Posterior):
         """generates a new sample using the position-dependent MALA transition kernel
 
@@ -724,223 +525,172 @@ class MySampler(Sampler):
         log_proba_accept : float
             log of the acceptance proba
         """
-        if self.stochastic:
-            accept_total = np.zeros((self.N,))
-            log_proba_accept_total = np.zeros((self.N,))
+        accept_total = np.zeros((self.N,))
+        log_proba_accept_total = np.zeros((self.N,))
 
-            # * define proba of changing each pixel
-            # * either uniformly or depending on their respective nll
-            # if posterior.prior_spatial is not None:
-            # n_sites = len(posterior.dict_sites)
-            # idx_site = int(self.rng.integers(0, n_sites))
-            list_idx = np.array(list(posterior.dict_sites.keys()))
+        # * define proba of changing each pixel
+        # * either uniformly or depending on their respective nll
+        # if posterior.prior_spatial is not None:
+        # n_sites = len(posterior.dict_sites)
+        # idx_site = int(self.rng.integers(0, n_sites))
+        list_idx = np.array(list(posterior.dict_sites.keys()))
 
-            for idx_site in list_idx:
-                idx_pix = posterior.dict_sites[idx_site]
-                n_pix = idx_pix.size
+        for idx_site in list_idx:
+            idx_pix = posterior.dict_sites[idx_site]
+            n_pix = idx_pix.size
 
-                new_Theta = self.current["Theta"] * 1  # (N, D)
-                grad_t = self.current["grad"][idx_pix, :] * 1
-                v_current = self.v.reshape((self.N, self.D))[idx_pix, :] * 1
+            # --- PROPOSAL STEP ---
+            new_Theta = self.current["Theta"] * 1  # (N, D)
+            grad_t = self.current["grad"][idx_pix, :] * 1
+            v_current = self.v.reshape((self.N, self.D))[idx_pix, :] * 1
 
-                # generate random
-                diag_G_t = 1 / (self.lambda_ + np.sqrt(v_current))  # (n_pix, D)
-
-                assert np.all(
-                    diag_G_t > 0
-                ), f"{diag_G_t}, {self.lambda_ + np.sqrt(self.v)}, {self.v}"
-
-                z_t = self.rng.standard_normal(size=(n_pix, self.D))
-                z_t *= np.sqrt(self.eps0 * diag_G_t)  # (n_pix, D)
-
-                # bias correction term
-                if self.compute_correction_term:
-                    # recursive version
-                    # correction = -1 / 2 * diag_G_t ** 2
-                    # / np.sqrt(self.v) * self.u
-
-                    # only with corresponding term
-                    hess_diag_t = self.current["hess_diag"][idx_pix, :] * 1
-                    j_t = self.j_t.reshape((self.N, self.D))[idx_pix, :] * 1
-
-                    correction = (
-                        -(1 - self.alpha)
-                        * self.alpha**j_t
-                        * (diag_G_t**2)
-                        / np.sqrt(v_current)
-                        * grad_t
-                        * hess_diag_t
-                    )  # (n_pix, D)
-                    if np.sum(~np.isfinite(correction)) > 0:
-                        n_inf = np.sum(~np.isfinite(correction))
-                        print(f"num of nan in correction term: {n_inf}")
-                    correction = np.nan_to_num(correction)  # ? nécessaire ?
-                else:
-                    correction = np.zeros((n_pix, self.D))
-
-                # combination
-                mu_current = (
-                    new_Theta[idx_pix, :]
-                    - self.eps0 / 2 * diag_G_t * grad_t
-                    + self.eps0 * correction
-                )  # (n_pix, D)
-
-                candidate = mu_current + z_t  # (n_pix, D)
-
-                log_q_candidate_given_current = -1 / 2 * np.sum(
-                    np.log(diag_G_t), axis=1
-                ) - 1 / (2 * self.eps0) * np.sum(
-                    (candidate - mu_current) ** 2 / diag_G_t, axis=1
-                )  # (n_pix,)
-
-                shape_q = log_q_candidate_given_current.shape
-                assert shape_q == (n_pix,), f"{shape_q}"
-
-                # * compute log_q of candidate given current
-                candidate_full = new_Theta * 1
-                candidate_full[idx_pix, :] = mu_current * 1
-
-                candidate_all = posterior.compute_all(
-                    candidate_full,
-                    compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
-                )
-                grad_cand = candidate_all["grad"][idx_pix, :] * 1
-                v_cand = (
-                    self.alpha * v_current + (1 - self.alpha) * grad_cand**2
-                )  # (n_pix, D)
-                diag_G_cand = 1 / (self.lambda_ + np.sqrt(v_cand))  # (n_pix, D)
-
-                if self.compute_correction_term:
-                    hess_diag_cand = candidate_all["hess_diag"][idx_pix, :] * 1
-
-                    correction_cand = -(
-                        (1 - self.alpha)
-                        * diag_G_cand**2
-                        / np.sqrt(v_cand)
-                        * grad_cand
-                        * hess_diag_cand
-                    )
-                else:
-                    correction_cand = np.zeros((n_pix, self.D))
-
-                mu_cand = (
-                    candidate
-                    - self.eps0 / 2 * diag_G_cand * grad_cand
-                    + self.eps0 * correction_cand
-                )  # (n_pix, D)
-
-                log_q_current_given_candidate = -1 / 2 * np.sum(
-                    np.log(diag_G_cand), axis=1
-                ) - 1 / (2 * self.eps0) * np.sum(
-                    (new_Theta[idx_pix, :] - mu_cand) ** 2 / diag_G_cand, axis=1
-                )  # (n_pix,)
-
-                shape_q = log_q_current_given_candidate.shape
-                assert shape_q == (n_pix,), f"{shape_q}"
-
-                # * compute proba accept
-                logpdf_current = -self.current["objective_pix"][idx_pix]
-                logpdf_candidate = -candidate_all["objective_pix"][idx_pix]
-
-                shape_1 = logpdf_current.shape
-                shape_2 = logpdf_candidate.shape
-                assert shape_1 == (n_pix,), f"{shape_1}"
-                assert shape_2 == (n_pix,), f"{shape_2}"
-
-                log_proba_accept = (
-                    logpdf_candidate
-                    - logpdf_current
-                    + log_q_current_given_candidate
-                    - log_q_candidate_given_current
-                )
-                assert log_proba_accept.shape == (n_pix,)
-
-                log_u = np.log(self.rng.uniform(0, 1, size=n_pix))
-                accept_arr = log_u < log_proba_accept
-
-                new_Theta[idx_pix, :] = np.where(
-                    accept_arr[:, None] * np.ones((n_pix, self.D)),
-                    candidate,  # (n_pix, D)
-                    new_Theta[idx_pix, :],  # (n_pix, D)
-                )
-
-                accept_total[idx_pix] = accept_arr * 1
-                log_proba_accept_total[idx_pix] = log_proba_accept * 1
-
-                # update v and j
-                v = self.v.reshape((self.N, self.D)) * 1
-                v[idx_pix, :] = v_cand * 1
-                self.v = v.flatten()
-
-                j = self.j_t.reshape((self.N, self.D)) * 1
-                j[idx_pix, :] = np.where(
-                    accept_arr[:, None],
-                    0.0,  # reset to 0 if accept
-                    j[idx_pix, :] + 1,  # else add 1
-                )
-                self.j_t = j.flatten()
-
-                if accept_arr.max() > 0:  # if at least one accept
-                    self.current = posterior.compute_all(
-                        new_Theta,
-                        compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
-                    )
-
-            # after loop
-            return accept_total.mean(), log_proba_accept_total.mean()
-
-        else:  # if optimization
-            grad_t = self.current["grad"].flatten()
-
-            # print(self.lambda_ + np.sqrt(self.v))
-            diag_G_t = 1 / (self.lambda_ + np.sqrt(self.v))
+            # generate random
+            diag_G_t = 1 / (self.lambda_ + np.sqrt(v_current))  # (n_pix, D)
 
             assert np.all(
                 diag_G_t > 0
             ), f"{diag_G_t}, {self.lambda_ + np.sqrt(self.v)}, {self.v}"
 
-            # generate random
-            z_t = self.rng.standard_normal(size=self.N * self.D)
-            z_t *= np.sqrt(self.eps0 * diag_G_t)
+            z_t = self.rng.standard_normal(size=(n_pix, self.D))
+            z_t *= np.sqrt(self.eps0 * diag_G_t)  # (n_pix, D)
+
+            # bias correction term
+            if self.compute_correction_term:
+                # recursive version
+                # correction = -1 / 2 * diag_G_t ** 2
+                # / np.sqrt(self.v) * self.u
+
+                # only with corresponding term
+                hess_diag_t = self.current["hess_diag"][idx_pix, :] * 1
+                j_t = self.j_t.reshape((self.N, self.D))[idx_pix, :] * 1
+
+                correction = (
+                    -(1 - self.alpha)
+                    * self.alpha**j_t
+                    * (diag_G_t**2)
+                    / np.sqrt(v_current)
+                    * grad_t
+                    * hess_diag_t
+                )  # (n_pix, D)
+                if np.sum(~np.isfinite(correction)) > 0:
+                    n_inf = np.sum(~np.isfinite(correction))
+                    print(f"num of nan in correction term: {n_inf}")
+                correction = np.nan_to_num(correction)  # ? nécessaire ?
+            else: # if no correction term then 0
+                correction = np.zeros((n_pix, self.D))
 
             # combination
             mu_current = (
-                self.current["Theta"].flatten() - self.eps0 / 2 * diag_G_t * grad_t
-            )
+                new_Theta[idx_pix, :]
+                - self.eps0 / 2 * diag_G_t * grad_t
+                + self.eps0 * correction
+            )  # (n_pix, D)
+
+            candidate = mu_current + z_t  # (n_pix, D), simulates Gaussian with mean mu_current and std dev sqrt(eps0 * diag_G_t). It is the PMALA proposal (Langevin step)
+
+            # --- ACCEPT/REJECT STEP ---
+            # * compute log_q of candidate given current
+            log_q_candidate_given_current = -1 / 2 * np.sum(
+                np.log(diag_G_t), axis=1
+            ) - 1 / (2 * self.eps0) * np.sum(
+                (candidate - mu_current) ** 2 / diag_G_t, axis=1
+            )  # (n_pix,)
+
+            shape_q = log_q_candidate_given_current.shape
+            assert shape_q == (n_pix,), f"{shape_q}"
+
+            # * compute log_q of current given candidate
+            candidate_full = new_Theta * 1
+            candidate_full[idx_pix, :] = mu_current * 1
 
             candidate_all = posterior.compute_all(
-                mu_current.reshape((self.N, self.D)),
+                candidate_full,
                 compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
             )
-            if candidate_all["objective"] < self.current["objective"]:
-                self.current = copy.copy(candidate_all)
-                accept = True
-                proba = 1
+            grad_cand = candidate_all["grad"][idx_pix, :] * 1
+            v_cand = (
+                self.alpha * v_current + (1 - self.alpha) * grad_cand**2
+            )  # (n_pix, D)
+            diag_G_cand = 1 / (self.lambda_ + np.sqrt(v_cand))  # (n_pix, D)
+
+            if self.compute_correction_term:
+                hess_diag_cand = candidate_all["hess_diag"][idx_pix, :] * 1
+
+                correction_cand = -(
+                    (1 - self.alpha)
+                    * diag_G_cand**2
+                    / np.sqrt(v_cand)
+                    * grad_cand
+                    * hess_diag_cand
+                )
             else:
-                candidate = mu_current + z_t  # (N * D,)
-                candidate_all = posterior.compute_all(
-                    candidate.reshape((self.N, self.D)),
+                correction_cand = np.zeros((n_pix, self.D))
+
+            mu_cand = (
+                candidate
+                - self.eps0 / 2 * diag_G_cand * grad_cand
+                + self.eps0 * correction_cand
+            )  # (n_pix, D)
+
+            log_q_current_given_candidate = -1 / 2 * np.sum(
+                np.log(diag_G_cand), axis=1
+            ) - 1 / (2 * self.eps0) * np.sum(
+                (new_Theta[idx_pix, :] - mu_cand) ** 2 / diag_G_cand, axis=1
+            )  # (n_pix,)
+
+            shape_q = log_q_current_given_candidate.shape
+            assert shape_q == (n_pix,), f"{shape_q}"
+
+            # * compute proba accept
+            logpdf_current = -self.current["objective_pix"][idx_pix]
+            logpdf_candidate = -candidate_all["objective_pix"][idx_pix]
+
+            shape_1 = logpdf_current.shape
+            shape_2 = logpdf_candidate.shape
+            assert shape_1 == (n_pix,), f"{shape_1}"
+            assert shape_2 == (n_pix,), f"{shape_2}"
+
+            log_proba_accept = (
+                logpdf_candidate
+                - logpdf_current
+                + log_q_current_given_candidate
+                - log_q_candidate_given_current
+            )
+            assert log_proba_accept.shape == (n_pix,)
+
+            log_u = np.log(self.rng.uniform(0, 1, size=n_pix))
+            accept_arr = log_u < log_proba_accept
+
+            new_Theta[idx_pix, :] = np.where(
+                accept_arr[:, None] * np.ones((n_pix, self.D)),
+                candidate,  # (n_pix, D)
+                new_Theta[idx_pix, :],  # (n_pix, D)
+            )
+
+            accept_total[idx_pix] = accept_arr * 1
+            log_proba_accept_total[idx_pix] = log_proba_accept * 1
+
+            # update v and j
+            v = self.v.reshape((self.N, self.D)) * 1
+            v[idx_pix, :] = v_cand * 1
+            self.v = v.flatten()
+
+            j = self.j_t.reshape((self.N, self.D)) * 1
+            j[idx_pix, :] = np.where(
+                accept_arr[:, None],
+                0.0,  # reset to 0 if accept
+                j[idx_pix, :] + 1,  # else add 1
+            )
+            self.j_t = j.flatten()
+
+            if accept_arr.max() > 0:  # if at least one accept
+                self.current = posterior.compute_all(
+                    new_Theta,
                     compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
                 )
 
-                if candidate_all["objective"] < self.current["objective"]:
-                    self.current = copy.copy(candidate_all)
-                    accept = True
-                    proba = 1
-                else:
-                    accept = False
-                    proba = 0
-
-            grad_tp1 = candidate_all["grad"].flatten()
-            self.v = self.alpha * self.v + (1 - self.alpha) * grad_tp1**2
-
-            assert np.sum(np.isnan(self.v)) == 0.0
-            assert (
-                np.sum(np.isinf(self.v)) == 0.0
-            ), f"{candidate_all['Theta']}, {candidate_all['grad']}"
-            assert np.sum(np.isnan(self.current["Theta"])) == 0.0
-
-            return accept, proba
+        # after loop
+        return accept_total.mean(), log_proba_accept_total.mean()
 
     def generate_new_sample_mtm(
         self, t: int, posterior: Posterior  # , idx_site: Union[int, None] = None
@@ -999,147 +749,92 @@ class MySampler(Sampler):
 
             neglogpdf_candidates = neglogpdf_candidates.reshape((n_pix, self.k_mtm + 1))
 
-            # * if optimization: define challenger with conditional posterior
-            # * instead of likelihood, and only keep if better than current
-            if not self.stochastic:
-                neglogpdf_candidates += posterior.partial_neglog_pdf_priors(
-                    new_Theta.copy(), idx_pix, candidates_pix
-                )  # (n_pix, k_mtm)
-                idx_challengers = np.argmin(
-                    neglogpdf_candidates[:, :-1], axis=1
-                )  # (n_pix,)
-                assert idx_challengers.shape == (n_pix,)
+            if posterior.prior_spatial is not None:
+                nlratio_prior_proposal = utils.compute_nlratio_prior_proposal(
+                    new_Theta * 1,
+                    posterior.prior_spatial.list_edges,
+                    posterior.prior_spatial.weights,
+                    idx_pix,
+                    candidates_pix,
+                )
+                shape_ = nlratio_prior_proposal.shape
+                assert shape_ == (n_pix, self.k_mtm + 1)
+                neglogpdf_candidates += nlratio_prior_proposal
 
-                neglogpdf_candidates_challengers = np.zeros((n_pix,))
-                challengers = np.zeros((n_pix, self.D))
-                for i in range(n_pix):
-                    neglogpdf_candidates_challengers[i] = neglogpdf_candidates[
-                        i, idx_challengers[i]
-                    ]
-                    challengers[i, :] = candidates_pix[i, idx_challengers[i], :]
-                # neglogpdf_candidates_challengers = neglogpdf_candidates[
-                #     np.arange(len(candidates_pix)), idx_challengers
-                # ]
-                assert neglogpdf_candidates_challengers.shape == (
-                    n_pix,
-                ), neglogpdf_candidates_challengers.shape
+            neglogpdf_candidates_min = np.amin(
+                neglogpdf_candidates, axis=1, keepdims=True
+            )
+            neglogpdf_candidates -= neglogpdf_candidates_min
 
-                # challengers = candidates_pix[
-                #     np.arange(len(candidates_pix)), idx_challengers, :
-                # ]
-                assert challengers.shape == (n_pix, self.D), challengers.shape
+            pdf_candidates = np.exp(-neglogpdf_candidates)  # (n_pix, k_mtm)
 
-                # * compute values of corresponding pixels in current x
-                candidates_already_Theta = candidates_pix[:, -1, :] * 1
-                neglogpdf_already_Theta = neglogpdf_candidates[:, -1] * 1
-                assert candidates_already_Theta.shape == (n_pix, self.D)
-                assert neglogpdf_already_Theta.shape == (n_pix,)
+            log_numerators = np.log(np.sum(pdf_candidates[:, :-1], axis=1))
+            # log_numerators = np.where(
+            #     np.isinf(log_numerators), -1e15, log_numerators
+            # )
 
-                # * select best pixels
-                accept_arr = (
-                    (neglogpdf_candidates_challengers < neglogpdf_already_Theta)
-                    & np.isfinite(neglogpdf_candidates_challengers)
-                    & np.isfinite(neglogpdf_already_Theta)
+            assert log_numerators.shape == (n_pix,), log_numerators.shape
+            # assert np.sum(1 - np.isfinite(log_numerators)) == 0, log_numerators
+
+            # * choose challenger candidate
+            weights = softmax(-neglogpdf_candidates[:, :-1], axis=1)
+            assert np.sum(1 - np.isfinite(weights)) == 0, weights
+
+            idx_challengers = np.zeros((n_pix,), dtype=int)
+            for i in range(n_pix):
+                idx_challengers[i] = self.rng.choice(
+                    self.k_mtm,
+                    p=weights[i],
                 )
 
-                new_Theta[idx_pix, :] = np.where(
-                    accept_arr[:, None] * np.ones((n_pix, self.D)),
-                    challengers,  # (n_pix, D)
-                    candidates_already_Theta,  # (n_pix, D)
-                )
+            challengers = candidates_pix[
+                np.arange(n_pix), idx_challengers, :
+            ]  # (n_pix, D)
+            neglogpdf_challengers = neglogpdf_candidates[
+                np.arange(n_pix), idx_challengers
+            ]
 
-                # * save which pixels were accepted
-                accept_total[idx_pix] = accept_arr * 1
+            shape_ = neglogpdf_challengers.shape
+            assert shape_ == (n_pix,), shape_
 
-            # *------
-            # * if sampling
-            else:
-                if posterior.prior_spatial is not None:
-                    nlratio_prior_proposal = utils.compute_nlratio_prior_proposal(
-                        new_Theta * 1,
-                        posterior.prior_spatial.list_edges,
-                        posterior.prior_spatial.weights,
-                        idx_pix,
-                        candidates_pix,
-                    )
-                    shape_ = nlratio_prior_proposal.shape
-                    assert shape_ == (n_pix, self.k_mtm + 1)
-                    neglogpdf_candidates += nlratio_prior_proposal
+            # * denominator
+            log_denominators = np.log(
+                np.sum(pdf_candidates, axis=1) - np.exp(-neglogpdf_challengers)
+            )
+            # log_denominators = np.where(
+            #     np.isinf(log_denominators), -1e15, log_denominators
+            # )
 
-                neglogpdf_candidates_min = np.amin(
-                    neglogpdf_candidates, axis=1, keepdims=True
-                )
-                neglogpdf_candidates -= neglogpdf_candidates_min
+            shape_ = log_denominators.shape
+            assert shape_ == (n_pix,), shape_
 
-                pdf_candidates = np.exp(-neglogpdf_candidates)  # (n_pix, k_mtm)
+            # assert np.sum(1 - np.isfinite(log_numerators)) == 0, log_numerators
+            # assert np.sum(1 - np.isfinite(log_denominators)) == 0, log_denominators
 
-                log_numerators = np.log(np.sum(pdf_candidates[:, :-1], axis=1))
-                # log_numerators = np.where(
-                #     np.isinf(log_numerators), -1e15, log_numerators
-                # )
+            # * accept-reject
+            log_rg = log_numerators - log_denominators
+            log_rg = np.where(
+                np.isfinite(log_rg), log_rg, 1e-15
+            )  # if either log_numerators or log_denominators is not finite, do not accept
 
-                assert log_numerators.shape == (n_pix,), log_numerators.shape
-                # assert np.sum(1 - np.isfinite(log_numerators)) == 0, log_numerators
+            log_u = np.log(self.rng.uniform(0, 1, size=n_pix))
+            accept_arr = log_u < log_rg
 
-                # * choose challenger candidate
-                weights = softmax(-neglogpdf_candidates[:, :-1], axis=1)
-                assert np.sum(1 - np.isfinite(weights)) == 0, weights
+            new_Theta[idx_pix, :] = np.where(
+                accept_arr[:, None] * np.ones((n_pix, self.D)),
+                challengers,  # (n_pix, D)
+                candidates_pix[:, -1, :],  # (n_pix, D)
+            )
 
-                idx_challengers = np.zeros((n_pix,), dtype=int)
-                for i in range(n_pix):
-                    idx_challengers[i] = self.rng.choice(
-                        self.k_mtm,
-                        p=weights[i],
-                    )
+            accept_total[idx_pix] = accept_arr * 1
+            log_rg_total[idx_pix] = log_rg * 1
 
-                challengers = candidates_pix[
-                    np.arange(n_pix), idx_challengers, :
-                ]  # (n_pix, D)
-                neglogpdf_challengers = neglogpdf_candidates[
-                    np.arange(n_pix), idx_challengers
-                ]
-
-                shape_ = neglogpdf_challengers.shape
-                assert shape_ == (n_pix,), shape_
-
-                # * denominator
-                log_denominators = np.log(
-                    np.sum(pdf_candidates, axis=1) - np.exp(-neglogpdf_challengers)
-                )
-                # log_denominators = np.where(
-                #     np.isinf(log_denominators), -1e15, log_denominators
-                # )
-
-                shape_ = log_denominators.shape
-                assert shape_ == (n_pix,), shape_
-
-                # assert np.sum(1 - np.isfinite(log_numerators)) == 0, log_numerators
-                # assert np.sum(1 - np.isfinite(log_denominators)) == 0, log_denominators
-
-                # * accept-reject
-                log_rg = log_numerators - log_denominators
-                log_rg = np.where(
-                    np.isfinite(log_rg), log_rg, 1e-15
-                )  # if either log_numerators or log_denominators is not finite, do not accept
-
-                log_u = np.log(self.rng.uniform(0, 1, size=n_pix))
-                accept_arr = log_u < log_rg
-
-                new_Theta[idx_pix, :] = np.where(
-                    accept_arr[:, None] * np.ones((n_pix, self.D)),
-                    challengers,  # (n_pix, D)
-                    candidates_pix[:, -1, :],  # (n_pix, D)
-                )
-
-                accept_total[idx_pix] = accept_arr * 1
-                log_rg_total[idx_pix] = log_rg * 1
-
-                # * re-initialize j for new point
-                new_j_t = self.j_t.reshape((self.N, self.D))
-                new_j_t[idx_pix, :] = np.where(
-                    accept_arr[:, None], 0.0, new_j_t[idx_pix, :]
-                )
-                self.j_t = new_j_t.flatten()  # (ND,)
+            # * re-initialize j for new point
+            new_j_t = self.j_t.reshape((self.N, self.D))
+            new_j_t[idx_pix, :] = np.where(
+                accept_arr[:, None], 0.0, new_j_t[idx_pix, :]
+            )
+            self.j_t = new_j_t.flatten()  # (ND,)
 
         # *------
         # * once all sites have been dealt with, update global parameters
@@ -1159,7 +854,4 @@ class MySampler(Sampler):
             assert np.sum(np.isnan(self.v)) == 0.0
             assert np.sum(np.isinf(self.v)) == 0.0
 
-        if not self.stochastic:
-            return np.mean(accept_total), np.mean(accept_total)
-        else:
-            return np.mean(accept_total), np.mean(log_rg_total)
+        return np.mean(accept_total), np.mean(log_rg_total)
