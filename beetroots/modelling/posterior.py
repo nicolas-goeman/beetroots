@@ -160,7 +160,7 @@ class Posterior:
         out += self.neglog_pdf_priors(Theta, full=full)
 
         # assert np.sum(np.isnan(nll)) == 0, np.sum(np.isnan(nll))
-        # assert np.sum(np.isnan(nl_priors)) == 0, np.sum(np.isnan(nl_priors))
+        # assert np.sum(np.isnan(nl_priors)) == 0, np.sum(np.isnan(nl_priors)) 
         return out
 
     def grad_neglog_pdf(
@@ -310,7 +310,8 @@ class Posterior:
             forward_map_evals = self.likelihood.evaluate_all_forward_map(
                 Theta, compute_derivatives, compute_derivatives_2nd_order
             )
-
+        
+        # It is usually empty at the very first iteration of the sampler
         if nll_utils == {}:
             nll_utils = self.likelihood.evaluate_all_nll_utils(
                 forward_map_evals,

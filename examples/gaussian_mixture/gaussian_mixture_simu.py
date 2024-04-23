@@ -4,6 +4,11 @@ import time
 from typing import Dict, Optional, Tuple
 
 import matplotlib.pyplot as plt
+
+'''Temporary solution because of error while running simulation on server (related to matplotlib backend apparently)'''
+import matplotlib
+matplotlib.use('Agg')
+
 import matplotlib.transforms as transforms
 import numpy as np
 import pandas as pd

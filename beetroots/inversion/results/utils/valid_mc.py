@@ -82,7 +82,6 @@ class ResultsValidMC(ResultsUtil):
                 for idx in idx_arr_d:
                     if idx > 0:
                         list_evolution[int(idx) :, idx_d] += incr
-
             plt.figure(figsize=(8, 6))
             plt.title("evolution of proportion of valid MC")
             idx_d = 0

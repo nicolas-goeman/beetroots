@@ -136,7 +136,7 @@ class SpatialPrior(PriorProbaDistribution):
         else:
             dict_sites_raw = {i: [] for i in range(2)}
             for (x, y) in list(df.index):
-                idx_site = (x + y) % 2
+                idx_site = (x + y) % 2 # to select on pixel out of two
                 dict_sites_raw[idx_site].append(df.at[(x, y), "idx"])
 
         dict_sites = {}

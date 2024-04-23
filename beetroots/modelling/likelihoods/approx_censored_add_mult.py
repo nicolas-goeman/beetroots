@@ -266,7 +266,7 @@ class MixingModelsLikelihood(Likelihood):
         forward_map_evals: dict,
         idx: Optional[np.ndarray] = None,
     ) -> np.ndarray:
-        r"""computes the weight of the additive model :math:`\lambda_{n, \ell}` (line-wise and pixel-wise). In this model, :math:`\lambda_{n, \ell}` is a functino of the observation :math:`y_{n, \ell}`, and therefore constant during the sampling
+        r"""computes the weight of the additive model :math:`\lambda_{n, \ell}` (line-wise and pixel-wise). In this model, :math:`\lambda_{n, \ell}` is a function of the observation :math:`y_{n, \ell}`, and therefore constant during the sampling
 
         .. math::
             \lambda_{n, \ell} = \frac{\sigma_a^{2b}}{\sigma_a^{2b} + (a \sigma_m y_{n, \ell})^{2b}}
@@ -362,7 +362,8 @@ class MixingModelsLikelihood(Likelihood):
         #             * lambda_ ** 2
         #         )
         #     )[:, None, :]
-        #     * forward_map_evals["grad_f_Theta"]
+        #     * forward_map_evals["
+        # _f_Theta"]
         # )
         u = (forward_map_evals["log_f_Theta"] - self.log_fm1) / (
             self.log_fp1 - self.log_fm1

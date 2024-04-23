@@ -464,5 +464,4 @@ class ResultsExtractorMCMC(ResultsExtractor):
                 list_names,
             ).main(list_mcmc_folders)
 
-        print()
         return

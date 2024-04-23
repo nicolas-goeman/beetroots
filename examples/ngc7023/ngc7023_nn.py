@@ -19,6 +19,7 @@ if __name__ == "__main__":
 
     params = SimulationRealDataNN.load_params(path_data, yaml_file)
 
+    # Check that the input parameters respect a given schema (in terms of dict/ done with cerberus library)
     SimulationRealDataNN.check_input_params_file(
         params,
         data_validation.schema,
@@ -27,14 +28,14 @@ if __name__ == "__main__":
     pixels_of_interest = {}
     if "pixels_of_interest" in params.keys():
         pixels_of_interest = params["pixels_of_interest"]
-
+    
     simulation = SimulationRealDataNN(
         **params["simu_init"],
         yaml_file=yaml_file,
         path_data=path_data,
         path_outputs=path_outputs,
         path_models=path_models,
-        forward_model_fixed_params=params["forward_model"]["fixed_params"],
+        forward_model_fixed_params=params['forward_model']["fixed_params"],
         pixels_of_interest=pixels_of_interest,
     )
 
