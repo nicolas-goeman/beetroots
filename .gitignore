@@ -1,3 +1,5 @@
+sandbox/*
+
 outputs/*
 # *.csv
 notebooks_pierre/forward_model/figures/*

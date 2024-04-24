@@ -735,8 +735,10 @@ class MySampler(Sampler):
             candidates_pix[:, -1, :] = self.current["Theta"][idx_pix, :] * 1
             candidates_pix = candidates_pix.reshape(
                 (n_pix * (self.k_mtm + 1), self.D)
-            )  # (n_pix * (k_mtm+1), D)
+            )  # (n_pix * (k_mtm+1), D) (to use the likelihood nll method, reshaped back after)
 
+            # --- COMPUTE WEIGHTS (USING LOG)
+            # Compute neglogpdf of candidates
             neglogpdf_candidates = posterior.likelihood.neglog_pdf_candidates(
                 candidates_pix,
                 idx=idx_pix,
