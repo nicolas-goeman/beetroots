@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from beetroots.inversion.run.abstract_run import Run
-from beetroots.modelling.posterior import Posterior
+from beetroots.modelling.target_distribution.posterior import Posterior
 from beetroots.sampler.abstract_sampler import Sampler
 from beetroots.sampler.saver.abstract_saver import Saver
 from beetroots.space_transform.abstract_transform import Scaler

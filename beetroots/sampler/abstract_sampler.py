@@ -4,7 +4,7 @@ from typing import Optional
 
 import numpy as np
 
-from beetroots.modelling.posterior import Posterior
+from beetroots.modelling.target_distribution.posterior import Posterior
 from beetroots.sampler.saver.abstract_saver import Saver
 from beetroots.sampler.utils.mml import EBayesMMLE
 

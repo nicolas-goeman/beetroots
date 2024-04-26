@@ -7,7 +7,7 @@ import pandas as pd
 from beetroots.inversion.plots.plots_estimator import PlotsEstimator
 from beetroots.inversion.results.utils.abstract_util import ResultsUtil
 from beetroots.inversion.results.utils.perf_saver import EstimatorPerfSaver
-from beetroots.modelling.posterior import Posterior
+from beetroots.modelling.target_distribution.posterior import Posterior
 from beetroots.space_transform.abstract_transform import Scaler
 
 

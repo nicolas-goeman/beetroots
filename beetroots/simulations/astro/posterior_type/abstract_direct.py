@@ -11,7 +11,7 @@ from beetroots.modelling.likelihoods.approx_censored_add_mult import (
     MixingModelsLikelihood,
 )
 from beetroots.modelling.likelihoods.gaussian_censored import CensoredGaussianLikelihood
-from beetroots.modelling.posterior import Posterior
+from beetroots.modelling.target_distribution.posterior import Posterior
 from beetroots.modelling.priors.l22_laplacian_prior import L22LaplacianSpatialPrior
 from beetroots.modelling.priors.smooth_indicator_prior import SmoothIndicatorPrior
 from beetroots.modelling.priors.spatial_prior_params import SpatialPriorParams

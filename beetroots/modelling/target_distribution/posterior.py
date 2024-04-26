@@ -311,7 +311,7 @@ class Posterior:
                 Theta, compute_derivatives, compute_derivatives_2nd_order
             )
         
-        # It is usually empty at the very first iteration of the sampler
+        # It is usually empty, it is not when regularizing params have been updated (once per iteration)
         if nll_utils == {}:
             nll_utils = self.likelihood.evaluate_all_nll_utils(
                 forward_map_evals,

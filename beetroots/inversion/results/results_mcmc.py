@@ -23,7 +23,7 @@ from beetroots.inversion.results.utils.valid_mc import ResultsValidMC
 from beetroots.inversion.results.utils.y_f_Theta import (
     ResultsDistributionComparisonYandFTheta,
 )
-from beetroots.modelling.posterior import Posterior
+from beetroots.modelling.target_distribution.posterior import Posterior
 from beetroots.space_transform.abstract_transform import Scaler
 
 

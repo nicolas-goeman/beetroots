@@ -18,7 +18,7 @@ from matplotlib.patches import Ellipse
 from beetroots.inversion.results.results_mcmc import ResultsExtractorMCMC
 from beetroots.inversion.run.run_mcmc import RunMCMC
 from beetroots.modelling.forward_maps.identity import BasicForwardMap
-from beetroots.modelling.posterior import Posterior
+from beetroots.modelling.target_distribution.posterior import Posterior
 from beetroots.modelling.priors.smooth_indicator_prior import SmoothIndicatorPrior
 from beetroots.sampler.my_sampler import MySampler
 from beetroots.sampler.saver.my_saver import MySaver

@@ -58,7 +58,7 @@ class Likelihood(ABC):
 
     @abstractmethod
     def sample_observation_model(
-        self, forward_map_evals: dict, rng: Optional[np.random.Generator]
+        self, forward_map_evals: dict, rng: Optional[np.random.Generator] # Used for model checking (maybe for something else)
     ) -> np.ndarray:
         pass
 

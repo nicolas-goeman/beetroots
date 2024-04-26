@@ -13,7 +13,7 @@ from beetroots.inversion.results.utils.lowest_obj_estimator import (
     ResultsLowestObjective,
 )
 from beetroots.inversion.results.utils.objective import ResultsObjective
-from beetroots.modelling.posterior import Posterior
+from beetroots.modelling.target_distribution.posterior import Posterior
 from beetroots.space_transform.abstract_transform import Scaler
 
 

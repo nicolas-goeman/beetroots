@@ -8,7 +8,7 @@ from scipy.special import softmax
 from tqdm.auto import tqdm
 
 from beetroots.modelling.likelihoods.abstract_likelihood import Likelihood
-from beetroots.modelling.posterior import Posterior
+from beetroots.modelling.target_distribution.posterior import Posterior
 from beetroots.sampler.abstract_sampler import Sampler
 from beetroots.sampler.saver.abstract_saver import Saver
 from beetroots.sampler.utils import utils
@@ -165,7 +165,7 @@ class MySampler(Sampler):
         count_pval = dict_model_check["count_pval"] * 1
         y_copy = likelihood.y * 1
 
-        dict_model_check["clppd_online"] *= count_pval / (count_pval + 1)
+        dict_model_check["clppd_online"] *= count_pval / (count_pval + 1) # Just used by the saver ?
         dict_model_check["clppd_online"] += np.exp(-nll_full) / (count_pval + 1)
 
         y_rep = likelihood.sample_observation_model(
@@ -380,6 +380,7 @@ class MySampler(Sampler):
             # ------
             
             # --- RANDOM CHOICE PMA-LA / MTM ---
+            # TODO : add a Gibbs alternative where we loop on each variable. Ideally we would be able to choose a kernel then for each variable.
             type_t = np.argmax(
                 self.rng.multinomial(
                     1,
