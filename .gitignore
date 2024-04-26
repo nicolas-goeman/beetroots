@@ -1,4 +1,7 @@
 outputs/*
+sandbox/*
+mermaid/*
+
 # *.csv
 notebooks_pierre/forward_model/figures/*
 notebooks_pierre/forward_model/torch_examples/figures/*
