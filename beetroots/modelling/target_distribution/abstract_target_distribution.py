@@ -21,8 +21,6 @@ class TargetDistribution(ABC):
         L: int,
         N: int,
         distribution_components: list,
-        separable: bool = True,
-        dict_sites: Optional[Dict[int, xp.ndarray]] = None,
     ):
         self.D = D
         """int: number of distinct physical parameters"""
@@ -35,17 +33,6 @@ class TargetDistribution(ABC):
 
         self.distribution_components = distribution_components
         """list: list of all distributions that compose the target distribution"""
-
-        self.dict_sites = {}
-        """dict[int, np.ndarray]: sites for pixels to be sampled in parallel in the MTM-chromoatic Gibbs kernel"""
-        if dict_sites is not None:
-            self.dict_sites = dict_sites
-        elif self.prior_spatial is not None:
-            self.dict_sites = self.prior_spatial.dict_sites
-        elif separable is True:
-            self.dict_sites = {0: np.arange(self.N)}
-        else:
-            self.dict_sites = {n: np.array([n]) for n in range(self.N)}
 
         return
 

@@ -24,3 +24,7 @@ class PriorProbaDistribution(ABC):
     @abstractmethod
     def hess_diag_neglog_pdf(self, Theta: np.ndarray) -> np.ndarray:
         pass
+
+    def evaluate_all_nlpdf_utils(self, Theta: np.ndarray) -> dict:
+        """Evaluate all utilities for the negative log-pdf"""
+        return dict()

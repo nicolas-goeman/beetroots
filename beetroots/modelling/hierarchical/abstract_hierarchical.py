@@ -21,7 +21,6 @@ class Hierarchical(ABC):
         self.N = N
         self.hyperparameters = None
 
-
     @abstractmethod
     def neglog_pdf(
         self,

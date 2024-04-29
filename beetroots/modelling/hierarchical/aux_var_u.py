@@ -10,7 +10,7 @@ except ImportError:
 from scipy.special import log_ndtr
 
 
-class AuxiliaryGivenTarget(Likelihood):
+class AuxiliaryGivenTarget(Likelihood, Hierarchical):
     r"""Class implementing the conditional distribution :math:`U|\Theta` for both full conditional distributions :math:`\pi(U|\Theta, Y)` and :math:`\pi(\Theta|U, Y)`."""
 
     def __init__(
@@ -19,7 +19,7 @@ class AuxiliaryGivenTarget(Likelihood):
         D: int,
         L: int,
         N: int,
-        differentiate_auxiliary: bool, # it appears in both conditionals, choose which variable you differentiate with respect to
+        differentiate_wrt_auxiliary: bool, # it appears in both conditionals, choose which variable you differentiate with respect to
         sigma_m: Union[float, xp.ndarray],
     ) -> None:
         super().__init__(forward_map, D, L, N)
@@ -31,8 +31,8 @@ class AuxiliaryGivenTarget(Likelihood):
             self.sigma_m = sigma_m
         self.sigma_m2 = xp.square(self.sigma_m)
 
-        if isinstance(differentiate_auxiliary, bool):
-            self.differentiate_auxiliary = differentiate_auxiliary
+        if isinstance(differentiate_wrt_auxiliary, bool):
+            self.differentiate_wrt_auxiliary = differentiate_wrt_auxiliary
 
     def neglog_pdf(
         self,
@@ -91,7 +91,7 @@ class AuxiliaryGivenTarget(Likelihood):
         idx: Optional[xp.ndarray] = None,
     ) -> Union[float, xp.ndarray]:
          
-        if self.differentiate_auxiliary:
+        if self.differentiate_wrt_auxiliary:
             out = self.gradient_neglog_pdf_wrt_aux(forward_map_evals, nlpdf_utils, pixelwise, full, idx)
         else:
             out = self.gradient_neglog_pdf_wrt_target(forward_map_evals, nlpdf_utils, pixelwise, full, idx)
@@ -142,7 +142,7 @@ class AuxiliaryGivenTarget(Likelihood):
         idx: Optional[xp.ndarray] = None,
     ) -> Union[float, xp.ndarray]:
         
-        if self.differentiate_auxiliary:
+        if self.differentiate_wrt_auxiliary:
             out = self.hess_neglog_pdf_wrt_aux(forward_map_evals, nlpdf_utils, pixelwise, full, idx)
         else:
             out = self.hess_neglog_pdf_wrt_target(forward_map_evals, nlpdf_utils, pixelwise, full, idx)
@@ -199,7 +199,7 @@ class AuxiliaryGivenTarget(Likelihood):
     #     )
     #     return forward_map_evals
             
-class ObservationsGivenAuxiliary(Hierarchical):
+class ObservationsGivenAuxiliary(Likelihood):
     r"""Class implementing the conditional distribution :math:`Y|U` for the full conditional distribution :math:`\pi(U|\Theta, Y)`."""
 
     def __init__(
