@@ -7,6 +7,8 @@ What we are doing currently is in a sense implementing a Gibbs sampler which cou
 
 ## Global
 
+In the following diagram, classes in green represent classes that were not present in the initial code structure and that were added for the sake of generalization.
+
 ```mermaid
 classDiagram
     class Sampler {
@@ -88,7 +90,7 @@ classDiagram
         +neglog_pdf(): xp.ndarray
         +gradient_neglog_pdf(): xp.ndarray
         +hess_diag_neglog_pdf(): xp.ndarray
-        +evaluate_all_nlpdf_utils: dict
+        +evaluate_all_nlpdf_utils(): dict
     }
 
     class PriorProbaDistribution {
@@ -117,6 +119,10 @@ classDiagram
     }
 
     class Hierarchical {
+        +neglog_pdf(..., differentiate_var: str): xp.ndarray
+        +gradient_neglog_pdf(..., differentiate_var: str): xp.ndarray
+        +hess_diag_neglog_pdf(..., differentiate_var: str): xp.ndarray
+        +evaluate_all_nlpdf_utils(..., differentiate_var: str): dict
     }
 
     class ForwardMap {
@@ -153,13 +159,17 @@ classDiagram
     Posterior o-- Likelihood
     Likelihood o-- ForwardMap
 
-    style Sampler fill:#030303
+    <!-- style Sampler fill:#030303 -->
+    style ComponentDistribution stroke:#32CD32
+    style Hierarchical stroke:#32CD32
+    style TargetDistribution stroke:#32CD32
+    style FullConditional stroke:#32CD32
 ```
 
-The ```Hierarchical``` class is used for component distributions that appear in several full conditionals. Indeed, we might want to differentiate with respect to one variable or another. Therefore, these component distributions implement one sub gradient method for each variable. When the ```FullConditional``` object, which inheritates from ```TargetDistribution```, computes derivatives of the neglog pdf of its components, it first checks if the component is an instance of a ```Hierarchical``` component distribution to add the ```name_var``` or not to the input parameters.
+The ```Hierarchical``` class is used for component distributions that appear in several ```FullConditional``` object. Indeed, we might want to differentiate with respect to one variable or another depending on the full conditional. Therefore, these component distributions implement one sub gradient method for each variable. When the ```FullConditional``` object, which inheritates from ```TargetDistribution```, computes derivatives of the neglog pdf of its components, it first checks if the component is an instance of a ```Hierarchical``` component distribution to add the ```name_var``` or not to the input parameters (hidden in a ```**kwargs``` argument in the abstract class).
 A ```FullConditional``` object does not necessarily have a ```Hierarchical``` object as component, e.g. our problem.
 
-## Target distribution
+<!-- ## Target distribution
 We want to extend the distributions we are sampling from further than just posterior distributions. Indeed, some sampling such as Gibbs samplers require to deal with full conditionals where the likelihood/prior is not perfectly appropriate anymore. Especially if we combine it with a hierarchical comprising auxiliary variables as we do.
 
 ```mermaid
@@ -284,12 +294,14 @@ graph TD;
         G[regu_spatial_params];
     end
 
-    target_distributions --> F["MySampler.sample()"]
-    C --> F;
-    D --> F;
-    E --> F;
-    G --> F;
-    F --> Output[Output];
+    target_distributions --\> F["MySampler.sample()"]
+    C --\> F;
+    D --\> F;
+    E --\> F;
+    G --\> F;
+    F --\> Output[Output];
 
     style Dot fill:transparent,stroke-width:0px;
-```
+``` 
+
+-->
