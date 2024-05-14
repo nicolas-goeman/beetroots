@@ -325,8 +325,8 @@ We do not necessarily need to have the ```nll_utils``` or the ```forward_map_eva
 ### 1. Kernel partially hard-coded in the ```Sampler``` object (current approach):
   * Probably easier to implement first
   * Would still require some effort to change the way we run the MCMC (setup process, e.g. ```Simulation``` and ```RunMCMC``` object). ```.yaml``` simulation files have parameters that are 'posterior approach dependent'. 
-  * Point of view:
-    * See the ```Sampler``` object as Gibbs sampler where each conditional distribution is sampled using a composition of PMALA and a MTM kernel. There might be a single conditional distribution. In this special case it boils down to the original problem of having a single target distribution, typically a classical posterior distribution.
+  * See the ```Sampler``` object as Gibbs sampler where each conditional distribution is sampled using a composition of PMALA and a MTM kernel. There might be a single conditional distribution. In this special case it boils down to the original problem of having a single target distribution, typically a classical posterior distribution.
+  * This is partially implemented in the ```hierarchical_sampler``` branch of Pierre's repository. The main issue is more about the terminology and we need to think about to generalize it to possible other hierarchical models.
   
 ### 2. Kernel view: 
   * The sampler is just a loop. 
