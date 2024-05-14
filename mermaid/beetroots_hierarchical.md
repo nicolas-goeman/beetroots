@@ -261,26 +261,8 @@ classDiagram
 
 Actually, priors and likelihood abstract objects have been modified to incorporate by default a ```evaluate_all_nlpdf_utils()``` method. This method is used to precompute quantities that will be used througout the computations of the neglog pdf and its derivatives so that we do not duplicate computations. This can simply be for example $\log u$ or some more complicated functions such as in the approximate mixing model of the original implementation.
 
+
 ## Sampler
-
-```mermaid
-classDiagram
-    class MySampler {
-        +D: int
-        +L: int
-        +N: int
-        +rng: xp.random.Generator
-        +kernel_params: dict
-        +current: dict
-        +generate_random_start_Theta_1pix(): xp.ndarray
-        +_update_model_check_values_(): dict
-        +_finalize_model_check_values(): dict
-        +sample(): None
-        +generate_new_sample_pmala_rmsprop(): Tuple[float]
-        +generate_new_sample_mtm(): Tuple[float]
-    }
-```
-
 
 ```mermaid
 graph TD;
@@ -305,5 +287,62 @@ graph TD;
 
     style Dot fill:transparent,stroke-width:0px;
 ``` 
-
 -->
+
+## Sampler
+
+```mermaid
+classDiagram
+    class MySampler {
+        +D: int
+        +L: int
+        +N: int
+        +rng: xp.random.Generator
+        +kernel_params: dict
+        +current: dict
+        +generate_random_start_Theta_1pix(): xp.ndarray
+        +_update_model_check_values_(): dict
+        +_finalize_model_check_values(): dict
+        +sample(): None
+        +generate_new_sample_pmala_rmsprop(): Tuple[float]
+        +generate_new_sample_mtm(): Tuple[float]
+    }
+```
+
+The ```current``` attribute (dict) contain the following keys:
+- *Theta*
+- *forward_map_evals*
+- *nll_utils*
+- *objective_pix*
+- *objective*
+- *grad*
+- *hess_diag*
+
+We do not necessarily need to have the ```nll_utils``` or the ```forward_map_evals``` in the sampler as it would be messy with hierarchical models, speciafically for the ```nll_utils```. Moreover, if they are put in the sampler there might be duplicates as some distributions appear in different full conditionals.
+
+## How to incorporate the Hierarchical sampler?
+
+### 1. Kernel partially hard-coded in the ```Sampler``` object (current approach):
+  * Probably easier to implement first
+  * Would still require some effort to change the way we run the MCMC (setup process, e.g. ```Simulation``` and ```RunMCMC``` object). ```.yaml``` simulation files have parameters that are 'posterior approach dependent'. 
+  * Point of view:
+    * See the ```Sampler``` object as Gibbs sampler where each conditional distribution is sampled using a composition of PMALA and a MTM kernel. There might be a single conditional distribution. In this special case it boils down to the original problem of having a single target distribution, typically a classical posterior distribution.
+  
+### 2. Kernel view: 
+  * The sampler is just a loop. 
+  * We provide the ```Sampler``` object a kernel built upstream.
+  * There is a big work in redifining how do we instantiate all the objects.
+  * It is the user's reponsability to provide a target distribution that contains the necessary methods for the kernel.
+  * The problem in this approach is that the kernel becomes a huge object. We just transfer the issues from the sampler to the kernel.
+
+
+### Questions:
+
+* Do we plan to stay with a combination of PMALA + MTM for the whole library? If not, how do we deal with the requirements of the target distributions? Indeed, some kernels do not require second-order differentiability.
+* Will there always be a single likelihood object even in hierarchical approaches?
+* Do we randomly choose the kernel, i.e. PMALA or MTM, and use the result for both variables $\theta$ and $u$ or do we randomly choose separately for both variables? MTM sample joint? In Pierre Palud’s code, $u$ is sampled in a weird way.
+* How to automatize the initialization of the variables? There is a specific order to respect, e.g; $\pi(\theta)$ then $\pi(u|\theta)$. It seems difficult to implement the initialization outside. The best might be to implement it in the ```ComponentDistribution``` objects.
+* Model checking needs to change to. Can we simply use $\pi(y|\theta, u) = \pi(y|u)$ instead of $\pi(y|\theta)$ in the previous approach.
+
+
+
