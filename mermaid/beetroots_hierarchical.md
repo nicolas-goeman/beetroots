@@ -159,12 +159,14 @@ classDiagram
     Posterior o-- Likelihood
     Likelihood o-- ForwardMap
 
-    <!-- style Sampler fill:#030303 -->
+    
     style ComponentDistribution stroke:#32CD32
     style Hierarchical stroke:#32CD32
     style TargetDistribution stroke:#32CD32
     style FullConditional stroke:#32CD32
 ```
+
+<!-- style Sampler fill:#030303 -->
 
 The ```Hierarchical``` class is used for component distributions that appear in several ```FullConditional``` object. Indeed, we might want to differentiate with respect to one variable or another depending on the full conditional. Therefore, these component distributions implement one sub gradient method for each variable. When the ```FullConditional``` object, which inheritates from ```TargetDistribution```, computes derivatives of the neglog pdf of its components, it first checks if the component is an instance of a ```Hierarchical``` component distribution to add the ```name_var``` or not to the input parameters (hidden in a ```**kwargs``` argument in the abstract class).
 A ```FullConditional``` object does not necessarily have a ```Hierarchical``` object as component, e.g. our problem.
