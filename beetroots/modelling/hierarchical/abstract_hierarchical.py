@@ -1,13 +1,15 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Union
 
+from beetroots.modelling.component_distribution import ComponentDistribution
+
 try:
     import cupy as xp
 except ImportError:
     import numpy as xp  # Fallback to NumPy if CuPy is not installed
 
 
-class Hierarchical(ABC):
+class Hierarchical(ComponentDistribution):
     r"""Abstract Base Class for a probability distribution on non-countable set"""
 
     def __init__(
@@ -16,9 +18,8 @@ class Hierarchical(ABC):
         L: int,
         N: int,
     ) -> None:
-        self.D = D
-        self.L = L
-        self.N = N
+        super().__init__(D, L, N)
+
         self.hyperparameters = None
 
     @abstractmethod
@@ -30,18 +31,22 @@ class Hierarchical(ABC):
         full: bool = False,
         idx: Optional[xp.ndarray] = None,
     ) -> Union[float, xp.ndarray]:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def gradient_neglog_pdf(
         self,
         forward_map_evals: dict[str, xp.ndarray],
         nll_utils: dict[str, xp.ndarray],
+        var_name: str,
     ) -> xp.ndarray:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def hess_diag_neglog_pdf(
-        self, forward_map_evals: dict, nll_utils: dict
+        self,
+        forward_map_evals: dict,
+        nll_utils: dict,
+        var_name: str,
     ) -> xp.ndarray:
-        pass
+        raise NotImplementedError

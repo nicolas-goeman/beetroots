@@ -1,10 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Union
 
+from beetroots.modelling.component_distribution import ComponentDistribution
+
 import numpy as np
 
 
-class Likelihood(ABC):
+class Likelihood(ComponentDistribution):
     r"""Abstract Base Class for a probability distribution on non-countable set"""
 
     def __init__(
@@ -54,13 +56,13 @@ class Likelihood(ABC):
         full: bool = False,
         idx: Optional[np.ndarray] = None,
     ) -> Union[float, np.ndarray]:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def sample_observation_model(
         self, forward_map_evals: dict, rng: Optional[np.random.Generator] # Used for model checking (maybe for something else)
     ) -> np.ndarray:
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def gradient_neglog_pdf(
@@ -68,7 +70,7 @@ class Likelihood(ABC):
         forward_map_evals: dict[str, np.ndarray],
         nll_utils: dict[str, np.ndarray],
     ) -> np.ndarray:
-        pass
+        raise NotImplementedError
 
     def neglog_pdf_candidates(
         self,
@@ -114,7 +116,7 @@ class Likelihood(ABC):
     def hess_diag_neglog_pdf(
         self, forward_map_evals: dict, nll_utils: dict
     ) -> np.ndarray:
-        pass
+        raise NotImplementedError
 
     def evaluate_all_forward_map(
         self,
@@ -136,4 +138,4 @@ class Likelihood(ABC):
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool,
     ) -> dict[str, Union[float, np.ndarray]]:
-        pass
+        raise NotImplementedError

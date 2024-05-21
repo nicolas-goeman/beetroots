@@ -86,12 +86,13 @@ class AuxiliaryGivenTarget(Likelihood, Hierarchical):
         self,
         forward_map_evals: dict,
         nlpdf_utils: dict,
+        var_name: str,
         pixelwise: bool = False,
         full: bool = False,
         idx: Optional[xp.ndarray] = None,
     ) -> Union[float, xp.ndarray]:
          
-        if self.differentiate_wrt_auxiliary:
+        if var_name == "aux":
             out = self.gradient_neglog_pdf_wrt_aux(forward_map_evals, nlpdf_utils, pixelwise, full, idx)
         else:
             out = self.gradient_neglog_pdf_wrt_target(forward_map_evals, nlpdf_utils, pixelwise, full, idx)
@@ -137,12 +138,13 @@ class AuxiliaryGivenTarget(Likelihood, Hierarchical):
         self,
         forward_map_evals: dict,
         nlpdf_utils: dict,
+        var_name: str,
         pixelwise: bool = False,
         full: bool = False,
         idx: Optional[xp.ndarray] = None,
     ) -> Union[float, xp.ndarray]:
         
-        if self.differentiate_wrt_auxiliary:
+        if var_name == "aux":
             out = self.hess_neglog_pdf_wrt_aux(forward_map_evals, nlpdf_utils, pixelwise, full, idx)
         else:
             out = self.hess_neglog_pdf_wrt_target(forward_map_evals, nlpdf_utils, pixelwise, full, idx)
@@ -165,6 +167,7 @@ class AuxiliaryGivenTarget(Likelihood, Hierarchical):
     def evaluate_all_nlpdf_utils(
         self,
         forward_map_evals: dict,
+        var_name: str,
         idx: Optional[xp.ndarray] = None,
         compute_derivatives: bool = True,
         compute_derivatives_2nd_order: bool = True,
@@ -399,7 +402,7 @@ class ObservationsGivenAuxiliary(Likelihood):
         
         return out
     
-    def evaluate_all_nll_utils(
+    def evaluate_all_nlpdf_utils(
         self,
         forward_map_evals: dict,
         idx: Optional[xp.ndarray] = None,

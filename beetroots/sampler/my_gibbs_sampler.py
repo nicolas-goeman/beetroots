@@ -18,7 +18,7 @@ from beetroots.sampler.abstract_sampler import Sampler
 from beetroots.sampler.saver.hierarchical_saver import HierarchicalSaver
 from beetroots.sampler.utils import utils
 from beetroots.sampler.utils.mml import EBayesMMLELogRate
-from beetroots.sampler.utils.my_sampler_params import MySamplerParams
+from beetroots.sampler.utils.sampler_params import MyGibbsSamplerParams
 
 
 class MyGibbsSampler(Sampler):
@@ -33,7 +33,7 @@ class MyGibbsSampler(Sampler):
 
     def __init__(
         self,
-        my_sampler_params: MySamplerParams,
+        my_gibbs_sampler_params: MyGibbsSamplerParams,
         D: int,
         L: int,
         N: int,
@@ -55,36 +55,39 @@ class MyGibbsSampler(Sampler):
             random number generator (for reproducibility), by default xp.random.default_rng(42)
         """
 
+        self.generate_random_start_fct = my_gibbs_sampler_params.fct_generate_random_start
+        r"""dict[function]: function to generate random start values for the variables"""
+
+        self.generate_random_start_fct_kwargs = my_gibbs_sampler_params.fct_generate_random_start_kwargs
+        r"""dict[dict]: kwargs for the function to generate random start values for the variables"""
+
         # P-MALA params
         # ! redefine size of params
-        self.eps0 = my_sampler_params.initial_step_size
-        r"""float: step size used in the Position-dependent MALA transition kernel, denoted :math:`\epsilon > 0` in the article"""
+        self.eps0 = my_gibbs_sampler_params.initial_step_size
+        r"""dict[float]: step size used in the Position-dependent MALA transition kernel, denoted :math:`\epsilon > 0` in the article"""
 
-        self.lambda_ = my_sampler_params.extreme_grad
-        r"""float: limit value that avoids division by zero when computing the RMSProp preconditioner, denoted :math:`\eta > 0` in the article"""
+        self.lambda_ = my_gibbs_sampler_params.extreme_grad
+        r"""dict[float]: limit value that avoids division by zero when computing the RMSProp preconditioner, denoted :math:`\eta > 0` in the article"""
 
-        self.alpha = my_sampler_params.history_weight
-        r"""float: weight of past values of :math:`v` in the exponential decay (cf RMSProp preconditioner), denoted :math:`\alpha \in ]0,1[` in the article"""
+        self.alpha = my_gibbs_sampler_params.history_weight
+        r"""dict[float]: weight of past values of :math:`v` in the exponential decay (cf RMSProp preconditioner), denoted :math:`\alpha \in ]0,1[` in the article"""
 
         # MTM params
         # assert xp.isclose(
-        #     int(pow(my_sampler_params.k_mtm, 1 / D)) ** D, my_sampler_params.k_mtm
+        #     int(pow(my_gibbs_sampler_params.k_mtm, 1 / D)) ** D, my_gibbs_sampler_params.k_mtm
         # ), "number of candidates for mtm needs to have an integer D-root"
-        self.k_mtm = my_sampler_params.k_mtm
-        r"""int: number of candidates in the MTM kernel, denoted :math:`K` in the article"""
+        self.k_mtm = my_gibbs_sampler_params.k_mtm
+        r"""dict[int]: number of candidates in the MTM kernel, denoted :math:`K` in the article"""
+
+        self.compute_correction_term = my_gibbs_sampler_params.compute_correction_term
+        r"""bool: wether or not to use the correction term (denoted :math:`\gamma` in the article) during the sampling (only used if `is_stochastic=True`)"""
 
         # overall
-        self.selection_probas = my_sampler_params.selection_probas
-        r"""xp.ndarray: vector of selection probabilities for the MTM and PMALA kernels, respectively, i.e., :math:`[p_{MTM}, 1 - p_{MTM}]`"""
-        assert (
-            xp.sum(self.selection_probas) == 1
-        ), f"{self.selection_probas} should sum to 1"
+        self.selection_probas = my_gibbs_sampler_params.selection_probas
+        r"""Union[dict[xp.ndarray], dict[List[float]]]: vector of selection probabilities for the MTM and PMALA kernels, respectively, i.e., :math:`[p_{MTM}, 1 - p_{MTM}]`"""
 
-        self.stochastic = my_sampler_params.is_stochastic
+        self.stochastic = my_gibbs_sampler_params.is_stochastic
         r"""bool: if True, the algorithm performs sampling, and optimization otherwise"""
-
-        self.compute_correction_term = my_sampler_params.compute_correction_term
-        r"""bool: wether or not to use the correction term (denoted :math:`\gamma` in the article) during the sampling (only used if `is_stochastic=True`)"""
 
         self.compute_derivatives_2nd_order = (
             self.stochastic and self.compute_correction_term
@@ -112,60 +115,7 @@ class MyGibbsSampler(Sampler):
         r"""dict: contains the number of iterations since last acceptance for each target distribution"""
 
 
-    def generate_random_start_Theta_1pix(
-        self, Theta: xp.ndarray, target_distribution: TargetDistribution, idx_pix: xp.ndarray
-    ) -> xp.ndarray:
-        r"""draws a random vectors for components :math:`n` (e.g., a pixel :math:`\theta_n`). The distribution used to draw these vectors is:
 
-        * the smooth indicator prior
-        * a combination of the smooth indicator prior and of a Gaussian mixture defined with the set of all combinations of neighbors of component :math:`n`
-
-        Parameters
-        ----------
-        Theta : xp.ndarray
-            current iterate
-        target_distribution : TargetDistribution
-            contains the lower and upper bounds of the hypercube
-        idx_pix : xp.ndarray
-            indices of the pixels
-
-        Returns
-        -------
-        xp.array of shape (n_pix, self.k_mtm, D)
-            random element of the hypercube defined by the lower and upper bounds with uniform distribution
-
-        Raises
-        ------
-        ValueError : if ``target_distribution.prior_indicator`` is None
-        """
-        seed = self.rng.integers(0, 1_000_000_000)
-        n_pix = idx_pix.size
-
-        if not hasattr(target_distribution, 'prior_indicator') or target_distribution.prior_indicator is None:
-            raise ValueError("The target distribution has no specified smooth indicator prior")
-
-        if not hasattr(target_distribution, 'prior_spatial') or target_distribution.prior_spatial is None:
-            # * sample from smooth indicator prior
-            return utils.sample_smooth_indicator(
-                target_distribution.prior_indicator.lower_bounds,
-                target_distribution.prior_indicator.upper_bounds,
-                target_distribution.prior_indicator.indicator_margin_scale,
-                size=(n_pix * self.k_mtm, self.D),
-                seed=seed,
-            ).reshape((n_pix, self.k_mtm, self.D))
-
-        else:
-            return utils.sample_conditional_spatial_and_indicator_prior(
-                Theta,
-                target_distribution.prior_spatial.list_edges,
-                target_distribution.prior_spatial.weights,
-                target_distribution.prior_indicator.lower_bounds,
-                target_distribution.prior_indicator.upper_bounds,
-                target_distribution.prior_indicator.indicator_margin_scale,
-                idx_pix=idx_pix,
-                k_mtm=self.k_mtm,
-                seed=seed,
-            )  # (n_pix, self.k_mtm, D)
 
     def _update_model_check_values(
         self,
@@ -450,17 +400,21 @@ class MyGibbsSampler(Sampler):
         log_proba_accept : float
             log of the acceptance proba
         """
-        accept_total = xp.zeros((self.N,))
-        log_proba_accept_total = xp.zeros((self.N,))
+        
         # NOTE: the new_var update was done inside the loop. That is, an expensive call to compute_all of the target distribution was done for each sites group. It does not seem necessary to do it in this way so it has been moved outside the loop as it is done in the MTM kernel.
 
         new_var = self.current[key]["var"] * 1 # (N, D)
+
+        accept_total = xp.zeros((new_var.shape[0],))
+        log_proba_accept_total = xp.zeros((self.N,))
 
         # * define proba of changing each pixel
         # * either uniformly or depending on their respective nll
         # if posterior.prior_spatial is not None:
         # n_sites = len(posterior.dict_sites)
         # idx_site = int(self.rng.integers(0, n_sites))
+
+        # TODO: generalize the use of dict_sites to all variables. Is it always present in the target_distribution?
         list_idx = xp.array(list(target_distribution.dict_sites.keys()))
 
         for idx_site in list_idx:
@@ -639,16 +593,18 @@ class MyGibbsSampler(Sampler):
         log_proba_accept : float
             log of the acceptance proba
         """
-        new_Theta = self.current[key]["var"] * 1  # (N, D)
+        new_var = self.current[key]["var"] * 1  # (N, D) in general
 
-        accept_total = xp.zeros((self.N,))
-        log_rg_total = xp.zeros((self.N,))
+        accept_total = xp.zeros((new_var.shape[0],)) # (N, ) in general
+        log_rg_total = xp.zeros((new_var.shape[0],)) # (N, ) in general
 
         # * define proba of changing each pixel
         # * either uniformly or depending on their respective nll
         # if posterior.prior_spatial is not None:
         # n_sites = len(posterior.dict_sites)
         # idx_site = int(self.rng.integers(0, n_sites))
+
+        # TODO: generalize the use of dict_sites to all variables. Is it always present in the target_distribution?
         list_idx = xp.array(list(target_distribution.dict_sites.keys()))
 
         for idx_site in list_idx:
@@ -656,21 +612,21 @@ class MyGibbsSampler(Sampler):
             n_pix = idx_pix.size
 
             # * generate and evaluate candidates
-            candidates_pix = xp.zeros((n_pix, self.k_mtm + 1, self.D))
-            candidates_pix[:, :-1, :] = self.generate_random_start_Theta_1pix(
-                new_Theta, posterior, idx_pix
+            candidates_pix = xp.zeros((n_pix, self.k_mtm + 1, *new_var.shape[1:]))
+            candidates_pix[:, :-1, ...] = self.generate_random_start_fct[key](
+                new_var, idx_pix, self.generate_random_start_fct_kwargs[key]
             )
-            candidates_pix[:, -1, :] = self.current["Theta"][idx_pix, :] * 1
+            candidates_pix[:, -1, ...] = self.current[key]['var'][idx_pix, :] * 1
             candidates_pix = candidates_pix.reshape(
-                (n_pix * (self.k_mtm + 1), self.D)
-            )  # (n_pix * (k_mtm+1), D) (to use the likelihood nll method, reshaped back after)
+                (n_pix * (self.k_mtm + 1), *new_var.shape[1:])
+            )  # (n_pix * (k_mtm+1), *new_var.shape[1:]) (to use the likelihood nll method, reshaped back after)
 
             # --- COMPUTE WEIGHTS (USING LOG)
             # Compute neglogpdf of candidates
             neglogpdf_candidates = posterior.likelihood.neglog_pdf_candidates(
                 candidates_pix,
                 idx=idx_pix,
-                Theta_t=new_Theta * 1,  # self.current["Theta"] * 1
+                Theta_t=new_var * 1,  # self.current["Theta"] * 1
             )  # (n_pix * (k_mtm+1),)
             assert neglogpdf_candidates.shape == (n_pix * (self.k_mtm + 1),)
 
@@ -681,7 +637,7 @@ class MyGibbsSampler(Sampler):
 
             if posterior.prior_spatial is not None:
                 nlratio_prior_proposal = utils.compute_nlratio_prior_proposal(
-                    new_Theta * 1,
+                    new_var * 1,
                     posterior.prior_spatial.list_edges,
                     posterior.prior_spatial.weights,
                     idx_pix,
@@ -750,7 +706,7 @@ class MyGibbsSampler(Sampler):
             log_u = xp.log(self.rng.uniform(0, 1, size=n_pix))
             accept_arr = log_u < log_rg
 
-            new_Theta[idx_pix, :] = xp.where(
+            new_var[idx_pix, :] = xp.where(
                 accept_arr[:, None] * xp.ones((n_pix, self.D)),
                 challengers,  # (n_pix, D)
                 candidates_pix[:, -1, :],  # (n_pix, D)
@@ -770,7 +726,7 @@ class MyGibbsSampler(Sampler):
         # * once all sites have been dealt with, update global parameters
         if accept_total.max() > 0:  # if at least one accept
             self.current = posterior.compute_all(
-                new_Theta,
+                new_var,
                 compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
             )
 

@@ -5,6 +5,26 @@ In the following, ```xp``` could be either ```np``` for numpy or ```cp``` for cu
 For the moment we do not introduce the kernel point of view in which the sampler is given kernels. We will keep  the current kernel $K$, i.e. combination of a PMALA kernel $K_1$ and a MTM $K_2$. We will use a kernel $K$ for each variable we are sampling from. In the future we would like to be able to send a single kernel to the sampler so that this one is not overloaded and remains a simple object.
 What we are doing currently is in a sense implementing a Gibbs sampler which could be made of single distribution if we provide a single distribution. In that case it is therefore just a single kernel $K$.
 
+## How to incorporate the Hierarchical sampler?
+
+### 1. Kernel partially hard-coded in the ```Sampler``` object (current approach):
+  * Probably easier to implement first
+  * Would still require some effort to change the way we run the MCMC (setup process, e.g. ```Simulation``` and ```RunMCMC``` object). ```.yaml``` simulation files have parameters that are 'posterior approach dependent'. 
+  * See the ```Sampler``` object as Gibbs sampler where each conditional distribution is sampled using a composition of PMALA and a MTM kernel. There might be a single conditional distribution. In this special case it boils down to the original problem of having a single target distribution, typically a classical posterior distribution.
+  * This is partially implemented in the ```hierarchical_sampler``` branch of Pierre's repository. The main issue is more about the terminology and we need to think about to generalize it to possible other hierarchical models.
+  
+### 2. Kernel view: 
+  * The sampler is just a loop. 
+  * We provide the ```Sampler``` object a kernel built upstream.
+  * There is a big work in redifining how do we instantiate all the objects.
+  * It is the user's reponsability to provide a target distribution that contains the necessary methods for the kernel.
+  * The problem in this approach is that the kernel becomes a huge object. We just transfer the issues from the sampler to the kernel.
+
+### Choice!
+
+We have decided to go with the **first option** in order to have something that could run in the time of the internship. It is also not sure yet how the second part will be shared across all projects so we won't dive into it too fast. We will describe here under how we plan/try to implement this approach in a generic manner.
+
+By generic we mean a hierarchical sampler that could be used with several hierarchical models.
 ## Global
 
 In the following diagram, classes in green represent classes that were not present in the initial code structure and that were added for the sake of generalization.
@@ -22,6 +42,15 @@ classDiagram
     }
 
     class MySampler {
+        +my_sampler_params: MySamplerParams
+        +current: dict
+        +_update_model_check_values_(): dict
+        +_finalize_model_check_values(): dict
+        +generate_new_sample_pmala_rmsprop(): Tuple[float]
+        +generate_new_sample_mtm(): Tuple[float]
+    }
+
+    class MyGibbsSampler {
         +my_sampler_params: MySamplerParams
         +current: dict
         +_update_model_check_values_(): dict
@@ -62,6 +91,7 @@ classDiagram
     }
 
     class TargetDistribution {
+        +var_shape: Tuple[int]
         +D: int
         +L: int
         +N: int
@@ -141,8 +171,10 @@ classDiagram
 
 
     Sampler <|-- MySampler
+    Sampler <|-- MyGibbsSampler
     Sampler <.. TargetDistribution: sample()
     MySampler <.. TargetDistribution: generate_new_sample_pmala_rmsprop()\ngenerate_new_sample_mtm()
+    MyGibbsSampler <.. TargetDistribution: generate_new_sample_pmala_rmsprop()\ngenerate_new_sample_mtm()
     Sampler <.. Saver: sample()
     Saver <|-- MySaver
     Saver o-- Scaler
@@ -294,7 +326,7 @@ graph TD;
 ```mermaid
 classDiagram
     class MySampler {
-        +D: int
+        +D: int <color:#ff0000>
         +L: int
         +N: int
         +rng: xp.random.Generator
@@ -320,29 +352,7 @@ The ```current``` attribute (dict) contain the following keys:
 
 We do not necessarily need to have the ```nll_utils``` or the ```forward_map_evals``` in the sampler as it would be messy with hierarchical models, speciafically for the ```nll_utils```. Moreover, if they are put in the sampler there might be duplicates as some distributions appear in different full conditionals.
 
-## How to incorporate the Hierarchical sampler?
-
-### 1. Kernel partially hard-coded in the ```Sampler``` object (current approach):
-  * Probably easier to implement first
-  * Would still require some effort to change the way we run the MCMC (setup process, e.g. ```Simulation``` and ```RunMCMC``` object). ```.yaml``` simulation files have parameters that are 'posterior approach dependent'. 
-  * See the ```Sampler``` object as Gibbs sampler where each conditional distribution is sampled using a composition of PMALA and a MTM kernel. There might be a single conditional distribution. In this special case it boils down to the original problem of having a single target distribution, typically a classical posterior distribution.
-  * This is partially implemented in the ```hierarchical_sampler``` branch of Pierre's repository. The main issue is more about the terminology and we need to think about to generalize it to possible other hierarchical models.
-  
-### 2. Kernel view: 
-  * The sampler is just a loop. 
-  * We provide the ```Sampler``` object a kernel built upstream.
-  * There is a big work in redifining how do we instantiate all the objects.
-  * It is the user's reponsability to provide a target distribution that contains the necessary methods for the kernel.
-  * The problem in this approach is that the kernel becomes a huge object. We just transfer the issues from the sampler to the kernel.
 
 
 ### Questions:
-
-* Do we plan to stay with a combination of PMALA + MTM for the whole library? If not, how do we deal with the requirements of the target distributions? Indeed, some kernels do not require second-order differentiability.
-* Will there always be a single likelihood object even in hierarchical approaches?
-* Do we randomly choose the kernel, i.e. PMALA or MTM, and use the result for both variables $\theta$ and $u$ or do we randomly choose separately for both variables? MTM sample joint? In Pierre Palud’s code, $u$ is sampled in a weird way.
-* How to automatize the initialization of the variables? There is a specific order to respect, e.g; $\pi(\theta)$ then $\pi(u|\theta)$. It seems difficult to implement the initialization outside. The best might be to implement it in the ```ComponentDistribution``` objects.
-* Model checking needs to change to. Can we simply use $\pi(y|\theta, u) = \pi(y|u)$ instead of $\pi(y|\theta)$ in the previous approach.
-
-
 
