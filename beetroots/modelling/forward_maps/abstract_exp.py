@@ -16,12 +16,12 @@ class ExpForwardMap(ForwardMap):
     """
 
     @abstractmethod
-    def evaluate_log(self, Theta: np.ndarray) -> np.ndarray:
+    def evaluate_log(self, Var: np.ndarray) -> np.ndarray:
         r"""evaluates the log-forward map for a set of input vectors :math:`(\theta_n))_{n=1}^N`
 
         Parameters
         ----------
-        Theta : np.ndarray of shape (N, D)
+        Var : np.ndarray of shape (N, D)
             array of points in the input space :math:`\Theta = (\theta_n)_{n=1}^N` with :math:`\theta_n \in \mathbb{R}^D`
 
         Returns
@@ -32,12 +32,12 @@ class ExpForwardMap(ForwardMap):
         pass
 
     @abstractmethod
-    def gradient_log(self, Theta: np.ndarray) -> np.ndarray:
+    def gradient_log(self, Var: np.ndarray) -> np.ndarray:
         r"""returns the gradient of the log-forward map for a set of input vectors :math:`(\theta_n))_{n=1}^N`
 
         Parameters
         ----------
-        Theta : np.ndarray of shape (N, D)
+        Var : np.ndarray of shape (N, D)
             array of points in the input space :math:`\Theta = (\theta_n)_{n=1}^N` with :math:`\theta_n \in \mathbb{R}^D`
 
         Returns
@@ -48,12 +48,12 @@ class ExpForwardMap(ForwardMap):
         pass
 
     @abstractmethod
-    def hess_diag_log(self, Theta: np.ndarray) -> np.ndarray:
+    def hess_diag_log(self, Var: np.ndarray) -> np.ndarray:
         r"""returns the diagonal of the hessian of the log-forward map for a set of input vectors :math:`(\theta_n))_{n=1}^N`
 
         Parameters
         ----------
-        Theta : np.ndarray of shape (N, D)
+        Var : np.ndarray of shape (N, D)
             array of points in the input space :math:`\Theta = (\theta_n)_{n=1}^N` with :math:`\theta_n \in \mathbb{R}^D`
 
         Returns

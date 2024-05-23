@@ -103,54 +103,54 @@ class NeuralNetworkApprox(ExpForwardMap):
         self._update_derivatives()
         return
 
-    def evaluate(self, Theta: np.ndarray) -> np.ndarray:
-        return np.exp(self.evaluate_log(Theta))  # (N, L)
+    def evaluate(self, Var: np.ndarray) -> np.ndarray:
+        return np.exp(self.evaluate_log(Var))  # (N, L)
 
-    def evaluate_log(self, Theta: np.ndarray) -> np.ndarray:
-        Theta_combined = np.zeros((Theta.shape[0], self.D))
-        Theta_combined += self.arr_fixed_values[None, :]
+    def evaluate_log(self, Var: np.ndarray) -> np.ndarray:
+        Var_combined = np.zeros((Var.shape[0], self.D))
+        Var_combined += self.arr_fixed_values[None, :]
         for i, idx in enumerate(self.list_indices_to_sample):
-            Theta_combined[:, idx] = Theta[:, i] * 1
+            Var_combined[:, idx] = Var[:, i] * 1
 
         # the neural network returns log10 of intensities
-        val = self.network.evaluate(Theta_combined[:, 1:])
+        val = self.network.evaluate(Var_combined[:, 1:])
         val *= self.LOGE_10  # go back to natural log scale
 
-        val += Theta_combined[:, 0][:, None]  # add ln kappa
+        val += Var_combined[:, 0][:, None]  # add ln kappa
 
         return val  # (N, L)
 
-    def gradient(self, Theta):
+    def gradient(self, Var):
         msg = "Gradients should be computed with compute_all"
         raise NotImplementedError(msg)
 
-    def gradient_log(self, Theta):
+    def gradient_log(self, Var):
         msg = "Gradients should be computed with compute_all"
         raise NotImplementedError(msg)
 
-    def _gradient_log(self, Theta):
+    def _gradient_log(self, Var):
         msg = "Gradients should be computed with compute_all"
         raise NotImplementedError(msg)
 
-    def _hess_diag_log(self, Theta):
+    def _hess_diag_log(self, Var):
         msg = "Gradients should be computed with compute_all"
         raise NotImplementedError(msg)
 
-    def hess_diag(self, Theta):
+    def hess_diag(self, Var):
         msg = "Gradients should be computed with compute_all"
         raise NotImplementedError(msg)
 
-    def hess_diag_log(self, Theta):
+    def hess_diag_log(self, Var):
         msg = "Gradients should be computed with compute_all"
         raise NotImplementedError(msg)
 
-    def _hess_full_log(self, Theta):
+    def _hess_full_log(self, Var):
         msg = "Gradients should be computed with compute_all"
         raise NotImplementedError(msg)
 
     def compute_all(
         self,
-        Theta: np.ndarray,
+        Var: np.ndarray,
         compute_lin: bool = True,
         compute_log: bool = True,
         compute_derivatives: bool = True,
@@ -160,7 +160,7 @@ class NeuralNetworkApprox(ExpForwardMap):
 
         Parameters
         ----------
-        Theta : np.ndarray of shape (N, D)
+        Var : np.ndarray of shape (N, D)
             array of points in the input space :math:`\Theta = (\theta_n)_{n=1}^N` with :math:`\theta_n \in \mathbb{R}^D`
         compute_lin : bool, optional
             wether or not to compute the forward model (and possibly the gradient and diagonal of the Hessian), by default True
@@ -175,127 +175,127 @@ class NeuralNetworkApprox(ExpForwardMap):
         Returns
         -------
         forward_map_evals : dict[str, np.ndarray]
-            dictionary with entries such as `f_Theta`, `log_f_Theta`, `grad_f_Theta`, `grad_log_f_Theta`, `hess_diag_f_Theta` and `hess_diag_log_f_Theta`, depending on the input booleans.
+            dictionary with entries such as `f_Var`, `log_f_Var`, `grad_f_Var`, `grad_log_f_Var`, `hess_diag_f_Var` and `hess_diag_log_f_Var`, depending on the input booleans.
 
         Note
         ----
         To evaluating :math:`f(\theta_n)` and the associated derivatives, 3 evaluations are enough for six functions. Calling each function would result in a total of 9 evaluations."""
         forward_map_evals = dict()
 
-        N_pix = Theta.shape[0]
+        N_pix = Var.shape[0]
 
         # combine fixed and sampled values for model evaluation
-        Theta_combined = np.zeros((N_pix, self.D))
-        Theta_combined += self.arr_fixed_values[None, :]
+        Var_combined = np.zeros((N_pix, self.D))
+        Var_combined += self.arr_fixed_values[None, :]
         for i, idx in enumerate(self.list_indices_to_sample):
-            Theta_combined[:, idx] += Theta[:, i]
+            Var_combined[:, idx] += Var[:, i]
 
         if compute_derivatives:
-            _Theta = torch.from_numpy(Theta_combined[:, 1:])  # .float()
+            _Var = torch.from_numpy(Var_combined[:, 1:])  # .float()
 
             #! integrated intensities and deriviatives in log10 scale
-            log_f_Theta = self.network.forward(_Theta).detach().numpy()  # (N, L)
+            log_f_Var = self.network.forward(_Var).detach().numpy()  # (N, L)
 
-            assert log_f_Theta.shape == (
+            assert log_f_Var.shape == (
                 N_pix,
                 self.L,
-            ), f"{log_f_Theta.shape} is not ({N_pix}, {self.L})"
-            assert np.max(np.abs(log_f_Theta)) > 0
+            ), f"{log_f_Var.shape} is not ({N_pix}, {self.L})"
+            assert np.max(np.abs(log_f_Var)) > 0
 
-            grad_log_f_Theta = (
-                self.jacobian_network(_Theta)
+            grad_log_f_Var = (
+                self.jacobian_network(_Var)
                 .detach()
                 .numpy()  # .to(self.network.device)
             ).transpose(
                 (0, 2, 1)
             )  # (N, D, L)
 
-            assert grad_log_f_Theta.shape == (
+            assert grad_log_f_Var.shape == (
                 N_pix,
                 self.D_sampling,
                 self.L,
-            ), f"{grad_log_f_Theta.shape} is not ({N_pix}, {self.D_sampling}, {self.L})"
-            assert np.max(np.abs(grad_log_f_Theta)) > 0
+            ), f"{grad_log_f_Var.shape} is not ({N_pix}, {self.D_sampling}, {self.L})"
+            assert np.max(np.abs(grad_log_f_Var)) > 0
 
-            log_f_Theta *= self.LOGE_10
-            grad_log_f_Theta = grad_log_f_Theta[:, :, :] * self.LOGE_10
+            log_f_Var *= self.LOGE_10
+            grad_log_f_Var = grad_log_f_Var[:, :, :] * self.LOGE_10
 
             if compute_derivatives_2nd_order:
-                hess_full_log_f_Theta = (
-                    self.hessian_network(_Theta)
+                hess_full_log_f_Var = (
+                    self.hessian_network(_Var)
                     .detach()
                     .numpy()  # .to(self.network.device)
                 )  # (N, L, D, D)
-                hess_diag_log_f_Theta = hess_full_log_f_Theta.diagonal(
+                hess_diag_log_f_Var = hess_full_log_f_Var.diagonal(
                     offset=0, axis1=2, axis2=3
                 ).transpose(
                     (0, 2, 1)
                 )  # (N, D, L)
 
-                assert hess_diag_log_f_Theta.shape == (
+                assert hess_diag_log_f_Var.shape == (
                     N_pix,
                     self.D_sampling,
                     self.L,
-                ), f"{hess_diag_log_f_Theta.shape} is not ({N_pix}, {self.D_sampling}, {self.L})"
-                assert np.max(np.abs(hess_diag_log_f_Theta)) > 0
+                ), f"{hess_diag_log_f_Var.shape} is not ({N_pix}, {self.D_sampling}, {self.L})"
+                assert np.max(np.abs(hess_diag_log_f_Var)) > 0
 
-                hess_diag_log_f_Theta = hess_diag_log_f_Theta[:, :, :] * self.LOGE_10
+                hess_diag_log_f_Var = hess_diag_log_f_Var[:, :, :] * self.LOGE_10
 
             # add log kappa
-            log_f_Theta = Theta_combined[:, 0][:, None] + log_f_Theta
+            log_f_Var = Var_combined[:, 0][:, None] + log_f_Var
 
             if compute_log:
-                forward_map_evals["log_f_Theta"] = log_f_Theta
+                forward_map_evals["log_f_Var"] = log_f_Var
 
-                grad_log_f_Theta_full = np.ones((N_pix, self.D_sampling, self.L))
+                grad_log_f_Var_full = np.ones((N_pix, self.D_sampling, self.L))
                 if 0 in self.list_indices_to_sample:
-                    grad_log_f_Theta_full[:, 1:, :] = (
-                        grad_log_f_Theta[:, self.list_indices_to_sample[1:], :] * 1
+                    grad_log_f_Var_full[:, 1:, :] = (
+                        grad_log_f_Var[:, self.list_indices_to_sample[1:], :] * 1
                     )
                 else:
-                    grad_log_f_Theta_full[:, :, :] = (
-                        grad_log_f_Theta[:, self.list_indices_to_sample, :] * 1
+                    grad_log_f_Var_full[:, :, :] = (
+                        grad_log_f_Var[:, self.list_indices_to_sample, :] * 1
                     )
-                forward_map_evals["grad_log_f_Theta"] = grad_log_f_Theta_full
+                forward_map_evals["grad_log_f_Var"] = grad_log_f_Var_full
 
                 if compute_derivatives_2nd_order:
-                    hess_diag_log_f_Theta_full = np.zeros(
+                    hess_diag_log_f_Var_full = np.zeros(
                         (N_pix, self.D_sampling, self.L)
                     )
                     if 0 in self.list_indices_to_sample:
-                        hess_diag_log_f_Theta_full[:, 1:, :] = (
-                            hess_diag_log_f_Theta[:, self.list_indices_to_sample[1:], :]
+                        hess_diag_log_f_Var_full[:, 1:, :] = (
+                            hess_diag_log_f_Var[:, self.list_indices_to_sample[1:], :]
                             * 1
                         )
                     else:
-                        hess_diag_log_f_Theta_full[:, :, :] = (
-                            hess_diag_log_f_Theta[:, self.list_indices_to_sample, :] * 1
+                        hess_diag_log_f_Var_full[:, :, :] = (
+                            hess_diag_log_f_Var[:, self.list_indices_to_sample, :] * 1
                         )
                     forward_map_evals[
-                        "hess_diag_log_f_Theta"
-                    ] = hess_diag_log_f_Theta_full
+                        "hess_diag_log_f_Var"
+                    ] = hess_diag_log_f_Var_full
 
             if compute_lin:
-                f_Theta = np.exp(log_f_Theta)
-                forward_map_evals["f_Theta"] = f_Theta
+                f_Var = np.exp(log_f_Var)
+                forward_map_evals["f_Var"] = f_Var
 
                 # (N_pix, D, L)
-                forward_map_evals["grad_f_Theta"] = (
-                    grad_log_f_Theta_full * f_Theta[:, None, :]
+                forward_map_evals["grad_f_Var"] = (
+                    grad_log_f_Var_full * f_Var[:, None, :]
                 )
 
                 # (N_pix, D, L)
                 if compute_derivatives_2nd_order:
-                    forward_map_evals["hess_diag_f_Theta"] = f_Theta[:, None, :] * (
-                        hess_diag_log_f_Theta_full + grad_log_f_Theta_full**2
+                    forward_map_evals["hess_diag_f_Var"] = f_Var[:, None, :] * (
+                        hess_diag_log_f_Var_full + grad_log_f_Var_full**2
                     )
 
             return forward_map_evals
 
         else:
-            log_f_Theta = self.evaluate_log(Theta)
+            log_f_Var = self.evaluate_log(Var)
             if compute_log:
-                forward_map_evals["log_f_Theta"] = log_f_Theta
+                forward_map_evals["log_f_Var"] = log_f_Var
             if compute_lin:
-                forward_map_evals["f_Theta"] = np.exp(log_f_Theta)
+                forward_map_evals["f_Var"] = np.exp(log_f_Var)
             return forward_map_evals

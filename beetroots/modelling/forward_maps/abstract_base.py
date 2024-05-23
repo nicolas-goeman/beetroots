@@ -73,12 +73,12 @@ class ForwardMap(ABC):
         r"""np.ndarray: values of :math:`\theta` that are not sampled, but set to a specific value. The indices of fixed entries are given in ``list_indices_fixed``"""
 
     @abstractmethod
-    def evaluate(self, Theta: np.ndarray) -> np.ndarray:
+    def evaluate(self, Var: np.ndarray) -> np.ndarray:
         r"""evaluates the forward map for a set of input vectors :math:`(\theta_n))_{n=1}^N`
 
         Parameters
         ----------
-        Theta : np.ndarray of shape (N, D)
+        Var : np.ndarray of shape (N, D)
             array of points in the input space :math:`\Theta = (\theta_n)_{n=1}^N` with :math:`\theta_n \in \mathbb{R}^D`
 
         Returns
@@ -89,12 +89,12 @@ class ForwardMap(ABC):
         pass
 
     @abstractmethod
-    def gradient(self, Theta: np.ndarray) -> np.ndarray:
+    def gradient(self, Var: np.ndarray) -> np.ndarray:
         r"""returns the gradient of the forward map for a set of input vectors :math:`(\theta_n))_{n=1}^N`
 
         Parameters
         ----------
-        Theta : np.ndarray of shape (N, D)
+        Var : np.ndarray of shape (N, D)
             array of points in the input space :math:`\Theta = (\theta_n)_{n=1}^N` with :math:`\theta_n \in \mathbb{R}^D`
 
         Returns
@@ -105,12 +105,12 @@ class ForwardMap(ABC):
         pass
 
     @abstractmethod
-    def hess_diag(self, Theta: np.ndarray) -> np.ndarray:
+    def hess_diag(self, Var: np.ndarray) -> np.ndarray:
         r"""returns the diagonal of the hessian of the forward map for a set of input vectors :math:`(\theta_n))_{n=1}^N`
 
         Parameters
         ----------
-        Theta : np.ndarray of shape (N, D)
+        Var : np.ndarray of shape (N, D)
             array of points in the input space :math:`\Theta = (\theta_n)_{n=1}^N` with :math:`\theta_n \in \mathbb{R}^D`
 
         Returns
@@ -123,7 +123,7 @@ class ForwardMap(ABC):
     @abstractmethod
     def compute_all(
         self,
-        Theta: np.ndarray,
+        Var: np.ndarray,
         compute_lin: bool = True,
         compute_log: bool = True,
         compute_derivatives: bool = True,
@@ -133,7 +133,7 @@ class ForwardMap(ABC):
 
         Parameters
         ----------
-        Theta : np.ndarray of shape (N, D)
+        Var : np.ndarray of shape (N, D)
             array of points in the input space :math:`\Theta = (\theta_n)_{n=1}^N` with :math:`\theta_n \in \mathbb{R}^D`
         compute_lin : bool, optional
             wether or not to compute the forward model (and possibly the gradient and diagonal of the Hessian), by default True
@@ -147,7 +147,7 @@ class ForwardMap(ABC):
         Returns
         -------
         forward_map_evals : dict[str, np.ndarray]
-            dictionary with entries such as `f_Theta`, `log_f_Theta`, `grad_f_Theta`, `grad_log_f_Theta`, `hess_diag_f_Theta` and `hess_diag_log_f_Theta`, depending on the input booleans.
+            dictionary with entries such as `f_Var`, `log_f_Var`, `grad_f_Var`, `grad_log_f_Var`, `hess_diag_f_Var` and `hess_diag_log_f_Var`, depending on the input booleans.
         """
         pass
 

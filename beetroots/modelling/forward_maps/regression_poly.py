@@ -89,71 +89,71 @@ def compute_hess_diag_poly_params(
 
 @nb.jit(nopython=True, fastmath=True)
 def evaluate_poly(
-    Theta: np.ndarray, pow_arr: np.ndarray, coeff_arr: np.ndarray, deg: int
+    Var: np.ndarray, pow_arr: np.ndarray, coeff_arr: np.ndarray, deg: int
 ) -> np.ndarray:
-    N_pix, D_no_kappa = Theta.shape
+    N_pix, D_no_kappa = Var.shape
     L, n_coefs = coeff_arr.shape
 
-    Theta_pow = np.ones((N_pix, D_no_kappa, deg + 1))
+    Var_pow = np.ones((N_pix, D_no_kappa, deg + 1))
     for pow_ in range(1, deg + 1):
-        Theta_pow[:, :, pow_] = Theta_pow[:, :, pow_ - 1] * Theta
+        Var_pow[:, :, pow_] = Var_pow[:, :, pow_ - 1] * Var
 
-    f_Theta = np.zeros((N_pix, L))
+    f_Var = np.zeros((N_pix, L))
     for idx in range(n_coefs):
         prod_ = np.ones((N_pix,))
         for d in range(D_no_kappa):
-            prod_ *= Theta_pow[:, d, pow_arr[idx, d]]
-        f_Theta[:, :] += np.expand_dims(coeff_arr[:, idx], 0) * np.expand_dims(prod_, 1)
+            prod_ *= Var_pow[:, d, pow_arr[idx, d]]
+        f_Var[:, :] += np.expand_dims(coeff_arr[:, idx], 0) * np.expand_dims(prod_, 1)
 
-    return f_Theta
+    return f_Var
 
 
 @nb.jit(nopython=True, fastmath=True)
 def grad_poly(
-    Theta: np.ndarray, pow_grad: np.ndarray, coef_grad: np.ndarray, deg: int
+    Var: np.ndarray, pow_grad: np.ndarray, coef_grad: np.ndarray, deg: int
 ) -> np.ndarray:
-    N_pix, D_no_kappa = Theta.shape
+    N_pix, D_no_kappa = Var.shape
     _, L, n_coefs = coef_grad.shape
 
-    Theta_pow = np.ones((N_pix, D_no_kappa, deg + 1))
+    Var_pow = np.ones((N_pix, D_no_kappa, deg + 1))
     for pow_ in range(1, deg + 1):
-        Theta_pow[:, :, pow_] = Theta_pow[:, :, pow_ - 1] * Theta
+        Var_pow[:, :, pow_] = Var_pow[:, :, pow_ - 1] * Var
 
-    grad_f_Theta = np.zeros((N_pix, D_no_kappa, L))
+    grad_f_Var = np.zeros((N_pix, D_no_kappa, L))
     for d in range(D_no_kappa):
         for idx in range(n_coefs):
             prod_ = np.ones((N_pix,))
             for i in range(D_no_kappa):
-                prod_ *= Theta_pow[:, i, pow_grad[d, idx, i]]
-            grad_f_Theta[:, d, :] += np.expand_dims(
+                prod_ *= Var_pow[:, i, pow_grad[d, idx, i]]
+            grad_f_Var[:, d, :] += np.expand_dims(
                 coef_grad[d, :, idx], 0
             ) * np.expand_dims(prod_, 1)
 
-    return grad_f_Theta
+    return grad_f_Var
 
 
 @nb.jit(nopython=True, fastmath=True)
 def hess_diag_poly(
-    Theta: np.ndarray, pow_hess_diag: np.ndarray, coef_hess_diag: np.ndarray, deg: int
+    Var: np.ndarray, pow_hess_diag: np.ndarray, coef_hess_diag: np.ndarray, deg: int
 ) -> np.ndarray:
-    N_pix, D_no_kappa = Theta.shape
+    N_pix, D_no_kappa = Var.shape
     _, L, n_coefs = coef_hess_diag.shape
 
-    Theta_pow = np.ones((N_pix, D_no_kappa, deg + 1))
+    Var_pow = np.ones((N_pix, D_no_kappa, deg + 1))
     for pow_ in range(1, deg + 1):
-        Theta_pow[:, :, pow_] = Theta_pow[:, :, pow_ - 1] * Theta
+        Var_pow[:, :, pow_] = Var_pow[:, :, pow_ - 1] * Var
 
-    hess_diag_f_Theta = np.zeros((N_pix, D_no_kappa, L))
+    hess_diag_f_Var = np.zeros((N_pix, D_no_kappa, L))
     for d in range(D_no_kappa):
         for idx in range(n_coefs):
             prod_ = np.ones((N_pix,))
             for i in range(D_no_kappa):
-                prod_ *= Theta_pow[:, i, pow_hess_diag[d, idx, i]]
-            hess_diag_f_Theta[:, d, :] += np.expand_dims(
+                prod_ *= Var_pow[:, i, pow_hess_diag[d, idx, i]]
+            hess_diag_f_Var[:, d, :] += np.expand_dims(
                 coef_hess_diag[d, :, idx], 0
             ) * np.expand_dims(prod_, 1)
 
-    return hess_diag_f_Theta
+    return hess_diag_f_Var
 
 
 class PolynomialApprox(ExpForwardMap):
@@ -300,51 +300,51 @@ class PolynomialApprox(ExpForwardMap):
             self.coeff_hess_diag[:, self.output_subset_indices, :] * 1
         )
 
-    def evaluate(self, Theta: np.ndarray) -> np.ndarray:
-        Theta_with_angle = np.column_stack(
-            (Theta, self.angle * np.ones((Theta.shape[0], 1))),
+    def evaluate(self, Var: np.ndarray) -> np.ndarray:
+        Var_with_angle = np.column_stack(
+            (Var, self.angle * np.ones((Var.shape[0], 1))),
         )
         val = evaluate_poly(
-            Theta_with_angle[:, 1:],
+            Var_with_angle[:, 1:],
             self.pow_arr,
             self.coeff_arr_subset,
             self.deg,
         )
-        val += Theta[:, 0][:, None]  # add log_kappa
+        val += Var[:, 0][:, None]  # add log_kappa
         return np.exp(val)  # (N, L)
 
-    def evaluate_log(self, Theta: np.ndarray) -> np.ndarray:
-        Theta_with_angle = np.column_stack(
-            (Theta, self.angle * np.ones((Theta.shape[0], 1))),
+    def evaluate_log(self, Var: np.ndarray) -> np.ndarray:
+        Var_with_angle = np.column_stack(
+            (Var, self.angle * np.ones((Var.shape[0], 1))),
         )
         val = evaluate_poly(
-            Theta_with_angle[:, 1:],
+            Var_with_angle[:, 1:],
             self.pow_arr,
             self.coeff_arr_subset,
             self.deg,
         )
-        val += Theta[:, 0][:, None]  # add log_kappa
+        val += Var[:, 0][:, None]  # add log_kappa
         return val  # (N, L)
 
-    def gradient(self, Theta: np.ndarray) -> np.ndarray:
-        Theta_with_angle = np.column_stack(
-            (Theta, self.angle * np.ones((Theta.shape[0], 1))),
+    def gradient(self, Var: np.ndarray) -> np.ndarray:
+        Var_with_angle = np.column_stack(
+            (Var, self.angle * np.ones((Var.shape[0], 1))),
         )
-        theta = Theta_with_angle[:, 1:]
-        grad_P = self._gradient_log(theta)  # (N, D, L)
-        Intensities = self.evaluate(Theta)  # (N, L)
+        var = Var_with_angle[:, 1:]
+        grad_P = self._gradient_log(var)  # (N, D, L)
+        Intensities = self.evaluate(Var)  # (N, L)
         return grad_P * Intensities[:, None, :]  # (N, D, L)
 
-    def gradient_log(self, Theta: np.ndarray) -> np.ndarray:
-        Theta_with_angle = np.column_stack(
-            (Theta, self.angle * np.ones((Theta.shape[0], 1))),
+    def gradient_log(self, Var: np.ndarray) -> np.ndarray:
+        Var_with_angle = np.column_stack(
+            (Var, self.angle * np.ones((Var.shape[0], 1))),
         )
-        theta = Theta_with_angle[:, 1:]
-        return self._gradient_log(theta)  # (N, D, L)
+        var = Var_with_angle[:, 1:]
+        return self._gradient_log(var)  # (N, D, L)
 
-    def _gradient_log(self, theta):
+    def _gradient_log(self, var):
         grad_ = grad_poly(
-            theta,
+            var,
             self.pow_grad,
             self.coeff_grad_subset,
             self.deg,
@@ -356,40 +356,40 @@ class PolynomialApprox(ExpForwardMap):
         grad_full[:, 1:, :] = grad_
         return grad_full  # (N, D, L)
 
-    def _hess_diag_log(self, theta):
+    def _hess_diag_log(self, var):
         hess_diag = hess_diag_poly(
-            theta, self.pow_hess_diag, self.coeff_hess_diag_subset, self.deg
+            var, self.pow_hess_diag, self.coeff_hess_diag_subset, self.deg
         )
         hess_diag = hess_diag[:, :-1, :]  # (N, D_no_kappa, L) (remove angle)
 
-        hess_diag_full = np.zeros((theta.shape[0], self.D, self.L))
+        hess_diag_full = np.zeros((var.shape[0], self.D, self.L))
         hess_diag_full[:, 1:, :] = hess_diag  # (N, D, L)
 
         return hess_diag_full  # (N, D, L)
 
-    def hess_diag(self, Theta: np.ndarray) -> np.ndarray:
-        Theta_with_angle = np.column_stack(
-            (Theta, self.angle * np.ones((Theta.shape[0], 1))),
+    def hess_diag(self, Var: np.ndarray) -> np.ndarray:
+        Var_with_angle = np.column_stack(
+            (Var, self.angle * np.ones((Var.shape[0], 1))),
         )
-        theta = Theta_with_angle[:, 1:]
+        var = Var_with_angle[:, 1:]
 
-        diag_hess_log = self._hess_diag_log(theta)
-        grad_log = self._gradient_log(theta)
-        Intensities = self.evaluate(Theta)
+        diag_hess_log = self._hess_diag_log(var)
+        grad_log = self._gradient_log(var)
+        Intensities = self.evaluate(Var)
 
         diag_hess = (diag_hess_log + grad_log**2) * Intensities[:, None, :]
         return diag_hess  # (N, D, L)
 
-    def hess_diag_log(self, Theta: np.ndarray) -> np.ndarray:
-        Theta_with_angle = np.column_stack(
-            (Theta, self.angle * np.ones((Theta.shape[0], 1))),
+    def hess_diag_log(self, Var: np.ndarray) -> np.ndarray:
+        Var_with_angle = np.column_stack(
+            (Var, self.angle * np.ones((Var.shape[0], 1))),
         )
-        theta = Theta_with_angle[:, 1:]
-        return self._hess_diag_log(theta)  # (N, D, L)
+        var = Var_with_angle[:, 1:]
+        return self._hess_diag_log(var)  # (N, D, L)
 
     def compute_all(
         self,
-        Theta: np.ndarray,
+        Var: np.ndarray,
         compute_lin: bool = True,
         compute_log: bool = True,
         compute_derivatives: bool = True,
@@ -399,7 +399,7 @@ class PolynomialApprox(ExpForwardMap):
 
         Parameters
         ----------
-        Theta : np.ndarray of shape (N, D)
+        Var : np.ndarray of shape (N, D)
             array of points in the input space :math:`\Theta = (\theta_n)_{n=1}^N` with :math:`\theta_n \in \mathbb{R}^D`
         compute_lin : bool, optional
             wether or not to compute the forward model (and possibly the gradient and diagonal of the Hessian), by default True
@@ -413,65 +413,65 @@ class PolynomialApprox(ExpForwardMap):
         Returns
         -------
         forward_map_evals : dict[str, np.ndarray]
-            dictionary with entries such as `f_Theta`, `log_f_Theta`, `grad_f_Theta`, `grad_log_f_Theta`, `hess_diag_f_Theta` and `hess_diag_log_f_Theta`, depending on the input booleans.
+            dictionary with entries such as `f_Var`, `log_f_Var`, `grad_f_Var`, `grad_log_f_Var`, `hess_diag_f_Var` and `hess_diag_log_f_Var`, depending on the input booleans.
 
         Note
         ----
         To evaluating :math:`f(\theta_n)` and the associated derivatives, 3 evaluations are enough for six functions. Calling each function would result in a total of 9 evaluations."""
         forward_map_evals = dict()
 
-        N_pix = Theta.shape[0]
+        N_pix = Var.shape[0]
 
         if compute_derivatives:
-            log_f_Theta = self.evaluate_log(Theta)
-            grad_log_f_Theta = self.gradient_log(Theta)
+            log_f_Var = self.evaluate_log(Var)
+            grad_log_f_Var = self.gradient_log(Var)
 
-            log_f_Theta *= self.LOGE_10
-            grad_log_f_Theta = grad_log_f_Theta[:, : self.D_no_kappa, :] * self.LOGE_10
+            log_f_Var *= self.LOGE_10
+            grad_log_f_Var = grad_log_f_Var[:, : self.D_no_kappa, :] * self.LOGE_10
 
             if compute_derivatives_2nd_order:
-                hess_diag_log_f_Theta = self.hess_diag(Theta)
-                hess_diag_log_f_Theta = (
-                    hess_diag_log_f_Theta[:, : self.D_no_kappa, :] * self.LOGE_10
+                hess_diag_log_f_Var = self.hess_diag(Var)
+                hess_diag_log_f_Var = (
+                    hess_diag_log_f_Var[:, : self.D_no_kappa, :] * self.LOGE_10
                 )
 
-            log_f_Theta = Theta[:, 0][:, None] + log_f_Theta
+            log_f_Var = Var[:, 0][:, None] + log_f_Var
 
             if compute_log:
-                forward_map_evals["log_f_Theta"] = log_f_Theta
+                forward_map_evals["log_f_Var"] = log_f_Var
 
-                grad_log_f_Theta_full = np.ones((N_pix, self.D, self.L))
-                grad_log_f_Theta_full[:, 1:, :] = grad_log_f_Theta * 1
-                forward_map_evals["grad_log_f_Theta"] = grad_log_f_Theta_full
+                grad_log_f_Var_full = np.ones((N_pix, self.D, self.L))
+                grad_log_f_Var_full[:, 1:, :] = grad_log_f_Var * 1
+                forward_map_evals["grad_log_f_Var"] = grad_log_f_Var_full
 
                 if compute_derivatives_2nd_order:
-                    hess_diag_log_f_Theta_full = np.zeros((N_pix, self.D, self.L))
-                    hess_diag_log_f_Theta_full[:, 1:, :] = hess_diag_log_f_Theta * 1
+                    hess_diag_log_f_Var_full = np.zeros((N_pix, self.D, self.L))
+                    hess_diag_log_f_Var_full[:, 1:, :] = hess_diag_log_f_Var * 1
                     forward_map_evals[
-                        "hess_diag_log_f_Theta"
-                    ] = hess_diag_log_f_Theta_full
+                        "hess_diag_log_f_Var"
+                    ] = hess_diag_log_f_Var_full
 
             if compute_lin:
-                f_Theta = np.exp(log_f_Theta)
-                forward_map_evals["f_Theta"] = f_Theta
+                f_Var = np.exp(log_f_Var)
+                forward_map_evals["f_Var"] = f_Var
 
                 # (N_pix, D, L)
-                forward_map_evals["grad_f_Theta"] = (
-                    grad_log_f_Theta_full * f_Theta[:, None, :]
+                forward_map_evals["grad_f_Var"] = (
+                    grad_log_f_Var_full * f_Var[:, None, :]
                 )
 
                 if compute_derivatives_2nd_order:
                     # (N_pix, D, L)
-                    forward_map_evals["hess_diag_f_Theta"] = f_Theta[:, None, :] * (
-                        hess_diag_log_f_Theta_full + grad_log_f_Theta_full**2
+                    forward_map_evals["hess_diag_f_Var"] = f_Var[:, None, :] * (
+                        hess_diag_log_f_Var_full + grad_log_f_Var_full**2
                     )
 
             return forward_map_evals
 
         else:
-            log_f_Theta = self.evaluate_log(Theta)
+            log_f_Var = self.evaluate_log(Var)
             if compute_log:
-                forward_map_evals["log_f_Theta"] = log_f_Theta
+                forward_map_evals["log_f_Var"] = log_f_Var
             if compute_lin:
-                forward_map_evals["f_Theta"] = np.exp(log_f_Theta)
+                forward_map_evals["f_Var"] = np.exp(log_f_Var)
             return forward_map_evals

@@ -24,18 +24,18 @@ class BasicForwardMap(ForwardMap):
         self.output_subset = np.arange(self.D)
         r"""List[int]: subset of outputs to be predicted. Can be updated with ``restrict_to_output_subset``"""
 
-    def evaluate(self, Theta: np.ndarray) -> np.ndarray:
-        return Theta[:, self.output_subset]  # (N, L)
+    def evaluate(self, Var: np.ndarray) -> np.ndarray:
+        return Var[:, self.output_subset]  # (N, L)
 
-    def gradient(self, Theta: np.ndarray) -> np.ndarray:
-        return np.ones((Theta.shape[0], self.L, self.L))  # (N, D, L)
+    def gradient(self, Var: np.ndarray) -> np.ndarray:
+        return np.ones((Var.shape[0], self.L, self.L))  # (N, D, L)
 
-    def hess_diag(self, Theta: np.ndarray) -> np.ndarray:
-        return np.zeros((Theta.shape[0], self.L, self.L))
+    def hess_diag(self, Var: np.ndarray) -> np.ndarray:
+        return np.zeros((Var.shape[0], self.L, self.L))
 
     def compute_all(
         self,
-        Theta: np.ndarray,
+        Var: np.ndarray,
         compute_lin: bool = True,
         compute_log: bool = False,
         compute_derivatives: bool = True,
@@ -45,7 +45,7 @@ class BasicForwardMap(ForwardMap):
 
         Parameters
         ----------
-        Theta : np.ndarray of shape (N, D)
+        Var : np.ndarray of shape (N, D)
             array of points in the input space :math:`\Theta = (\theta_n)_{n=1}^N` with :math:`\theta_n \in \mathbb{R}^D`
         compute_lin : bool, optional
             always considered as True. Kept for this class for consistency.
@@ -59,16 +59,16 @@ class BasicForwardMap(ForwardMap):
         Returns
         -------
         forward_map_evals : dict[str, np.ndarray]
-            dictionary with the `f_Theta` entry and possibly `grad_f_Theta`, and `hess_diag_f_Theta`, depending on the input booleans.
+            dictionary with the `f_Var` entry and possibly `grad_f_Var`, and `hess_diag_f_Var`, depending on the input booleans.
         """
         forward_map_evals = dict()
-        forward_map_evals["f_Theta"] = self.evaluate(Theta)[:, self.output_subset]
+        forward_map_evals["f_Var"] = self.evaluate(Var)[:, self.output_subset]
 
         if compute_derivatives:
-            forward_map_evals["grad_f_Theta"] = self.gradient(Theta)
+            forward_map_evals["grad_f_Var"] = self.gradient(Var)
 
             if compute_derivatives_2nd_order:
-                forward_map_evals["hess_diag_f_Theta"] = self.hess_diag(Theta)
+                forward_map_evals["hess_diag_f_Var"] = self.hess_diag(Var)
 
         return forward_map_evals
 
