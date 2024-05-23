@@ -105,8 +105,6 @@ class LogNormalLikelihood(Likelihood):
 
     def neglog_pdf(
         self,
-        forward_map_evals: dict,
-        nll_utils: dict,
         pixelwise: bool = False,
         full: bool = False,
         idx: Optional[np.ndarray] = None,
@@ -120,8 +118,8 @@ class LogNormalLikelihood(Likelihood):
             sigma = self.sigma * 1
         else:
             n_pix = idx.size
-            k_mtm = forward_map_evals["f_Theta"].shape[0] // n_pix
-            N_pix = forward_map_evals["f_Theta"].shape[0]
+            k_mtm = self.forward_map_evals["f_Var"].shape[0] // n_pix
+            N_pix = self.forward_map_evals["f_Var"].shape[0]
 
             logy = np.zeros((n_pix, k_mtm, self.L))
             sigma = np.zeros((n_pix, k_mtm, self.L))
@@ -137,7 +135,7 @@ class LogNormalLikelihood(Likelihood):
             logy = logy.reshape((N_pix, self.L))
             sigma = sigma.reshape((N_pix, self.L))
 
-        nlpdf = logy + (logy - forward_map_evals["log_f_Theta"]) ** 2 / (
+        nlpdf = logy + (logy - self.forward_map_evals["log_f_Var"]) ** 2 / (
             2 * sigma**2
         )  # (N_pix, L)
 
@@ -150,11 +148,11 @@ class LogNormalLikelihood(Likelihood):
         return np.sum(nlpdf)  # float
 
     def gradient_neglog_pdf(
-        self, forward_map_evals: dict, nll_utils: dict
+        self
     ) -> np.ndarray:
         grad_ = (
-            forward_map_evals["grad_log_f_Theta"]
-            * ((forward_map_evals["log_f_Theta"] - self.logy) / self.sigma**2)[
+            self.forward_map_evals["grad_log_f_Var"]
+            * ((self.forward_map_evals["log_f_Var"] - self.logy) / self.sigma**2)[
                 :, None, :
             ]
         )  # (N, D, L)
@@ -166,20 +164,12 @@ class LogNormalLikelihood(Likelihood):
         return grad_
 
     def hess_diag_neglog_pdf(
-        self, forward_map_evals: dict, nll_utils: dict
+        self
     ) -> np.ndarray:
         r"""Hessian w.r.t to the parameter of the log-normal distribution.
 
         Parameters
         ----------
-        x : np.ndarray of shape (N, D)
-            [description]
-        f_Theta : np.ndarray of shape (N, L), optional
-            [description], by default None
-        grad_f_Theta : np.ndarray of shape (N, D, L), optional
-            [description], by default None
-        hess_diag_f_Theta : np.ndarray of shape (N, D, L), optional
-            [description], by default None
 
         Returns
         -------
@@ -187,9 +177,9 @@ class LogNormalLikelihood(Likelihood):
             [description]
         """
         hess_diag = (1 / self.sigma**2)[:, None, :] * (
-            forward_map_evals["grad_log_f_Theta"] ** 2
-            + forward_map_evals["hess_diag_log_f_Theta"]
-            * (forward_map_evals["f_Theta"] - self.logy)[:, None, :]
+            self.forward_map_evals["grad_log_f_Var"] ** 2
+            + self.forward_map_evals["hess_diag_log_f_Var"]
+            * (self.forward_map_evals["f_Var"] - self.logy)[:, None, :]
         )
 
         # ! issue: do not sum over L if L = D (i.e. identity forward_map)
@@ -200,22 +190,21 @@ class LogNormalLikelihood(Likelihood):
 
     def evaluate_all_forward_map(
         self,
-        Theta: np.ndarray,
+        Var: np.ndarray,
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool = True,
     ) -> dict:
-        assert len(Theta.shape) == 2 and Theta.shape[1] == self.D
-        forward_map_evals = self.forward_map.compute_all(
-            Theta, True, True, compute_derivatives, compute_derivatives_2nd_order
+        assert len(Var.shape) == 2 and Var.shape[1] == self.D
+        self.forward_map_evals = self.forward_map.compute_all(
+            Var, True, True, compute_derivatives, compute_derivatives_2nd_order
         )
-        return forward_map_evals
+        return self.forward_map_evals
 
-    def evaluate_all_nll_utils(
+    def evaluate_all_nlpdf_utils(
         self,
-        forward_map_evals: dict,
         idx: Optional[int] = None,
         compute_derivatives: bool = False,
         compute_derivatives_2nd_order: bool = True,
     ) -> dict:
-        nll_utils = {}
-        return nll_utils
+        self.nlpdf_utils = {}
+

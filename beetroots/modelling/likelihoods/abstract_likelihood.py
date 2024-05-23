@@ -18,6 +18,8 @@ class Likelihood(ComponentDistribution):
         y: np.ndarray,
     ) -> None:
         self.forward_map = forward_map
+        self.forward_map_evals = {}
+        '''dict: forward map evaluations (log and derivatives)'''
         self.D = D
         self.L = L
         self.N = N
@@ -76,7 +78,6 @@ class Likelihood(ComponentDistribution):
         self,
         candidates: np.ndarray,
         idx: np.ndarray,
-        Theta_t: Optional[np.ndarray] = None,
         return_forward_map_evals: bool = False,
     ) -> np.ndarray:
         assert len(candidates.shape) == 2 and candidates.shape[1] == self.D
@@ -120,20 +121,19 @@ class Likelihood(ComponentDistribution):
 
     def evaluate_all_forward_map(
         self,
-        Theta: np.ndarray,
+        Var: np.ndarray,
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool,
     ) -> dict[str, Union[float, np.ndarray]]:
-        assert len(Theta.shape) == 2 and Theta.shape[1] == self.D
+        assert len(Var.shape) == 2 and Var.shape[1] == self.D
         forward_map_evals = self.forward_map.compute_all(
-            Theta, True, True, compute_derivatives, compute_derivatives_2nd_order
+            Var, True, True, compute_derivatives, compute_derivatives_2nd_order
         )
-        return forward_map_evals
+        self.forward_map_evals = forward_map_evals
 
     @abstractmethod
-    def evaluate_all_nll_utils(
+    def evaluate_all_nlpdf_utils(
         self,
-        forward_map_evals: dict[str, Union[float, np.ndarray]],
         idx: Optional[np.ndarray],
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool,

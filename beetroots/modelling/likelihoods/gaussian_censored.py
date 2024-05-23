@@ -90,8 +90,6 @@ class CensoredGaussianLikelihood(Likelihood):
 
     def neglog_pdf(
         self,
-        forward_map_evals: dict,
-        nll_utils: dict,
         pixelwise: bool = False,
         full: bool = False,
         idx: Optional[np.ndarray] = None,
@@ -110,8 +108,8 @@ class CensoredGaussianLikelihood(Likelihood):
 
         else:
             n_pix = idx.size
-            k_mtm = forward_map_evals["f_Theta"].shape[0] // n_pix
-            N_pix = forward_map_evals["f_Theta"].shape[0]
+            k_mtm = self.forward_map_evals["f_Var"].shape[0] // n_pix
+            N_pix = self.forward_map_evals["f_Var"].shape[0]
             assert n_pix * k_mtm == N_pix
 
             y = np.zeros((n_pix, k_mtm, self.L))
@@ -140,8 +138,8 @@ class CensoredGaussianLikelihood(Likelihood):
 
         nlpdf = np.where(
             y <= omega,
-            self.neglog_pdf_ac(forward_map_evals, nll_utils, y, sigma, omega, bias),
-            self.neglog_pdf_au(forward_map_evals, nll_utils, y, sigma, omega, bias),
+            self.neglog_pdf_ac(self.forward_map_evals, self.nlpdf_utils, y, sigma, omega, bias),
+            self.neglog_pdf_au(self.forward_map_evals, self.nlpdf_utils, y, sigma, omega, bias),
         )  # (N_pix, L)
 
         if full:
@@ -154,28 +152,24 @@ class CensoredGaussianLikelihood(Likelihood):
 
     def neglog_pdf_ac(
         self,
-        forward_map_evals: dict,
-        nll_utils: dict,
         y: np.ndarray,
         sigma: np.ndarray,
         omega: np.ndarray,
         bias: np.ndarray,
     ) -> np.ndarray:
-        return -statsnorm.logcdf((omega - forward_map_evals["f_Theta"] - bias) / sigma)
+        return -statsnorm.logcdf((omega - self.forward_map_evals["f_Var"] - bias) / sigma)
 
     def neglog_pdf_au(
         self,
-        forward_map_evals: dict,
-        nll_utils: dict,
         y: np.ndarray,
         sigma: np.ndarray,
         omega: np.ndarray,
         bias: np.ndarray,
     ) -> np.ndarray:
-        return (forward_map_evals["f_Theta"] + bias - y) ** 2 / (2 * sigma**2)
+        return (self.forward_map_evals["f_Var"] + bias - y) ** 2 / (2 * sigma**2)
 
     def gradient_neglog_pdf(
-        self, forward_map_evals: dict, nll_utils: dict
+        self,
     ) -> np.ndarray:
         """[summary]
 
@@ -185,9 +179,9 @@ class CensoredGaussianLikelihood(Likelihood):
         ----------
         x : np.ndarray of shape (N, D)
             [description]
-        f_Theta : np.ndarray of shape (N, L), optional
+        f_Var : np.ndarray of shape (N, L), optional
             image of x via forward map, by default None
-        grad_f_Theta : np.ndarray of shape (N, D, L), optional
+        grad_f_Var : np.ndarray of shape (N, D, L), optional
             [description], by default None
 
         Returns
@@ -195,15 +189,15 @@ class CensoredGaussianLikelihood(Likelihood):
         np.ndarray of shape (N, D)
             [description]
         """
-        # if f_Theta is None:
-        #     f_Theta = self.forward_map.evaluate(x)  # (N, L)
-        # if grad_f_Theta is None:
-        #     grad_f_Theta = self.forward_map.gradient(x)  # (N, D, L)
+        # if f_Var is None:
+        #     f_Var = self.forward_map.evaluate(x)  # (N, L)
+        # if grad_f_Var is None:
+        #     grad_f_Var = self.forward_map.gradient(x)  # (N, D, L)
 
         grad_ = np.where(
             (self.y == self.omega)[:, None, :],
-            self.gradient_neglog_pdf_ac(forward_map_evals, nll_utils),
-            self.gradient_neglog_pdf_au(forward_map_evals, nll_utils),
+            self.gradient_neglog_pdf_ac(self.forward_map_evals, self.nlpdf_utils),
+            self.gradient_neglog_pdf_au(self.forward_map_evals, self.nlpdf_utils),
         )  # (N, D, L)
 
         # ! issue: do not sum over L if L = D (i.e. identity forward_map)
@@ -213,13 +207,13 @@ class CensoredGaussianLikelihood(Likelihood):
         return grad_
 
     def gradient_neglog_pdf_ac(
-        self, forward_map_evals: dict, nll_utils: dict
+        self,
     ) -> np.ndarray:
         grad_ = (
-            forward_map_evals["grad_f_Theta"]
+            self.forward_map_evals["grad_f_Var"]
             * (
                 utils.norm_pdf_cdf_ratio(
-                    (self.omega - forward_map_evals["f_Theta"] - self.bias) / self.sigma
+                    (self.omega - self.forward_map_evals["f_Var"] - self.bias) / self.sigma
                 )
                 / self.sigma
             )[:, None, :]
@@ -227,18 +221,18 @@ class CensoredGaussianLikelihood(Likelihood):
         return grad_  # (N, D, L)
 
     def gradient_neglog_pdf_au(
-        self, forward_map_evals: dict, nll_utils: dict
+        self,
     ) -> np.ndarray:
         grad_ = (
-            forward_map_evals["grad_f_Theta"]
-            * ((forward_map_evals["f_Theta"] + self.bias - self.y) / self.sigma**2)[
+            self.forward_map_evals["grad_f_Var"]
+            * ((self.forward_map_evals["f_Var"] + self.bias - self.y) / self.sigma**2)[
                 :, None, :
             ]
         )
         return grad_  # (N, D, L)
 
     def hess_diag_neglog_pdf(
-        self, forward_map_evals: dict, nll_utils: dict
+        self,
     ) -> np.ndarray:
         r"""[summary]
 
@@ -248,11 +242,11 @@ class CensoredGaussianLikelihood(Likelihood):
         ----------
         x : np.ndarray of shape (N, D)
             [description]
-        f_Theta : np.ndarray of shape (N, L), optional
+        f_Var : np.ndarray of shape (N, L), optional
             [description], by default None
-        grad_f_Theta : np.ndarray of shape (N, D, L), optional
+        grad_f_Var : np.ndarray of shape (N, D, L), optional
             [description], by default None
-        hess_diag_f_Theta : np.ndarray of shape (N, D, L), optional
+        hess_diag_f_Var : np.ndarray of shape (N, D, L), optional
             [description], by default None
 
         Returns
@@ -262,8 +256,8 @@ class CensoredGaussianLikelihood(Likelihood):
         """
         hess_diag = np.where(
             (self.y == self.omega)[:, None, :],
-            self.hess_diag_neglog_pdf_ac(forward_map_evals, nll_utils),
-            self.hess_diag_neglog_pdf_au(forward_map_evals, nll_utils),
+            self.hess_diag_neglog_pdf_ac(self.forward_map_evals, self.nlpdf_utils),
+            self.hess_diag_neglog_pdf_au(self.forward_map_evals, self.nlpdf_utils),
         )  # (N, D, L)
 
         # ! issue: do not sum over L if L = D (i.e. identity forward_map)
@@ -273,21 +267,21 @@ class CensoredGaussianLikelihood(Likelihood):
         return hess_diag
 
     def hess_diag_neglog_pdf_ac(
-        self, forward_map_evals: dict, nll_utils: dict
+        self,
     ) -> np.ndarray:
         hess_diag = (
             utils.norm_pdf_cdf_ratio(
-                (self.omega - forward_map_evals["f_Theta"]) / self.sigma
+                (self.omega - self.forward_map_evals["f_Var"]) / self.sigma
             )
             / self.sigma
         )[:, None, :] * (
-            forward_map_evals["hess_diag_f_Theta"]
-            + forward_map_evals["grad_f_Theta"] ** 2
+            self.forward_map_evals["hess_diag_f_Var"]
+            + self.forward_map_evals["grad_f_Var"] ** 2
             * (
                 (
-                    (self.omega - forward_map_evals["f_Theta"] - self.bias) / self.sigma
+                    (self.omega - self.forward_map_evals["f_Var"] - self.bias) / self.sigma
                     + utils.norm_pdf_cdf_ratio(
-                        (self.omega - forward_map_evals["f_Theta"] - self.bias)
+                        (self.omega - self.forward_map_evals["f_Var"] - self.bias)
                         / self.sigma
                     )
                 )
@@ -297,46 +291,43 @@ class CensoredGaussianLikelihood(Likelihood):
         return hess_diag  # (N, D, L)
 
     def hess_diag_neglog_pdf_au(
-        self, forward_map_evals: dict, nll_utils: dict
+        self,
     ) -> np.ndarray:
         return (1 / self.sigma**2)[:, None, :] * (
-            forward_map_evals["grad_f_Theta"] ** 2
-            + forward_map_evals["hess_diag_f_Theta"]
-            * (forward_map_evals["f_Theta"] + self.bias - self.y)[:, None, :]
+            self.forward_map_evals["grad_f_Var"] ** 2
+            + self.forward_map_evals["hess_diag_f_Var"]
+            * (self.forward_map_evals["f_Var"] + self.bias - self.y)[:, None, :]
         )  # (N, D, L)
 
-    def evaluate_all_nll_utils(
+    def evaluate_all_nlpdf_utils(
         self,
-        forward_map_evals: dict,
         idx: Optional[np.ndarray] = None,
         compute_derivatives: bool = True,
         compute_derivatives_2nd_order: bool = True,
     ) -> dict:
-        nll_utils = {}
-        return nll_utils
+        self.nlpdf_utils = {}
 
     def sample_observation_model(
         self,
-        forward_map_evals: dict,
         rng: np.random.Generator = np.random.default_rng(),
     ) -> np.ndarray:
         return np.maximum(
             self.omega,
-            forward_map_evals["f_Theta"] + rng.normal(loc=0.0, scale=self.sigma),
+            self.forward_map_evals["f_Var"] + rng.normal(loc=0.0, scale=self.sigma),
         )
 
     def evaluate_all_forward_map(
         self,
-        Theta: np.ndarray,
+        Var: np.ndarray,
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool = True,
     ) -> dict:
-        assert len(Theta.shape) == 2 and Theta.shape[1] == self.D
-        forward_map_evals = self.forward_map.compute_all(
-            Theta,
+        assert len(Var.shape) == 2 and Var.shape[1] == self.D
+        self.forward_map_evals = self.forward_map.compute_all(
+            Var,
             compute_lin=True,
             compute_log=False,
             compute_derivatives=compute_derivatives,
             compute_derivatives_2nd_order=compute_derivatives_2nd_order,
         )
-        return forward_map_evals
+        return self.forward_map_evals

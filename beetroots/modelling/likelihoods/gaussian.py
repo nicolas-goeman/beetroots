@@ -61,8 +61,6 @@ class GaussianLikelihood(Likelihood):
 
     def neglog_pdf(
         self,
-        forward_map_evals: dict,
-        nll_utils: dict,
         pixelwise: bool = False,
         idx: Optional[np.ndarray] = None,
     ) -> Union[float, np.ndarray]:
@@ -72,8 +70,8 @@ class GaussianLikelihood(Likelihood):
             sigma = self.sigma * 1
         else:
             n_pix = idx.size
-            k_mtm = forward_map_evals["f_Theta"].shape[0] // n_pix
-            N_pix = forward_map_evals["f_Theta"].shape[0]
+            k_mtm = self.forward_map_evals["f_Var"].shape[0] // n_pix
+            N_pix = self.forward_map_evals["f_Var"].shape[0]
 
             y = np.zeros((n_pix, k_mtm, self.L))
             sigma = np.zeros((n_pix, k_mtm, self.L))
@@ -89,7 +87,7 @@ class GaussianLikelihood(Likelihood):
             y = y.reshape((N_pix, self.L))
             sigma = sigma.reshape((N_pix, self.L))
 
-        nlpdf = (forward_map_evals["f_Theta"] - y) ** 2 / (2 * sigma**2)  # (N_pix, L)
+        nlpdf = (self.forward_map_evals["f_Var"] - y) ** 2 / (2 * sigma**2)  # (N_pix, L)
 
         if pixelwise:
             return np.sum(nlpdf, axis=1)  # (N_pix,)
@@ -97,7 +95,7 @@ class GaussianLikelihood(Likelihood):
         return np.sum(nlpdf)  # float
 
     def gradient_neglog_pdf(
-        self, forward_map_evals: dict, nll_utils: dict
+        self,
     ) -> np.ndarray:
         """[summary]
 
@@ -107,9 +105,9 @@ class GaussianLikelihood(Likelihood):
         ----------
         x : np.ndarray of shape (N, D)
             [description]
-        f_Theta : np.ndarray of shape (N, L), optional
+        f_Var : np.ndarray of shape (N, L), optional
             image of x via forward map, by default None
-        grad_f_Theta : np.ndarray of shape (N, D, L), optional
+        grad_f_Var : np.ndarray of shape (N, D, L), optional
             [description], by default None
 
         Returns
@@ -117,14 +115,14 @@ class GaussianLikelihood(Likelihood):
         np.ndarray of shape (N, D)
             [description]
         """
-        # if f_Theta is None:
-        #     f_Theta = self.forward_map.evaluate(x)  # (N, L)
-        # if grad_f_Theta is None:
-        #     grad_f_Theta = self.forward_map.gradient(x)  # (N, D, L)
+        # if f_Var is None:
+        #     f_Var = self.forward_map.evaluate(x)  # (N, L)
+        # if grad_f_Var is None:
+        #     grad_f_Var = self.forward_map.gradient(x)  # (N, D, L)
 
         grad_ = (
-            forward_map_evals["grad_f_Theta"]
-            * ((forward_map_evals["f_Theta"] - self.y) / self.sigma**2)[:, None, :]
+            self.forward_map_evals["grad_f_Var"]
+            * ((self.forward_map_evals["f_Var"] - self.y) / self.sigma**2)[:, None, :]
         )  # (N, D, L)
 
         # ! issue: do not sum over L if L = D (i.e. identity forward_map)
@@ -134,12 +132,12 @@ class GaussianLikelihood(Likelihood):
         return grad_
 
     def hess_diag_neglog_pdf(
-        self, forward_map_evals: dict, nll_utils: dict
+        self
     ) -> np.ndarray:
         hess_diag = (1 / self.sigma**2)[:, None, :] * (
-            forward_map_evals["grad_f_Theta"] ** 2
-            + forward_map_evals["hess_diag_f_Theta"]
-            * (forward_map_evals["f_Theta"] - self.y)[:, None, :]
+            self.forward_map_evals["grad_f_Var"] ** 2
+            + self.forward_map_evals["hess_diag_f_Var"]
+            * (self.forward_map_evals["f_Var"] - self.y)[:, None, :]
         )
         # ! issue: do not sum over L if L = D (i.e. identity forward_map)
         if not self.D == self.L:
@@ -149,33 +147,31 @@ class GaussianLikelihood(Likelihood):
 
     def evaluate_all_forward_map(
         self,
-        Theta: np.ndarray,
+        Var: np.ndarray,
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool = True,
     ) -> dict:
-        assert len(Theta.shape) == 2 and Theta.shape[1] == self.D
-        forward_map_evals = self.forward_map.compute_all(
-            Theta,
+        assert len(Var.shape) == 2 and Var.shape[1] == self.D
+        self.forward_map_evals = self.forward_map.compute_all(
+            Var,
             True,
             False,
             compute_derivatives,
             compute_derivatives_2nd_order,
         )
-        return forward_map_evals
+        return self.forward_map_evals
 
-    def evaluate_all_nll_utils(
+    def evaluate_all_nlpdf_utils(
         self,
-        forward_map_evals: dict,
         idx: Optional[np.ndarray] = None,
         compute_derivatives: bool = True,
         compute_derivatives_2nd_order: bool = True,
-    ) -> dict:
-        nll_utils = {}
-        return nll_utils
+    ) -> None:
+        self.nlpdf_utils = {}
+
 
     def sample_observation_model(
         self,
-        forward_map_evals: dict,
         rng: np.random.Generator = np.random.default_rng(),
     ) -> np.ndarray:
-        return forward_map_evals["f_Theta"] + rng.normal(loc=0.0, scale=self.sigma)
+        return self.forward_map_evals["f_Var"] + rng.normal(loc=0.0, scale=self.sigma)
