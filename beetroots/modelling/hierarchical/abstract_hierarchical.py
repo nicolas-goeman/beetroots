@@ -25,8 +25,6 @@ class Hierarchical(ComponentDistribution):
     @abstractmethod
     def neglog_pdf(
         self,
-        forward_map_evals: dict,
-        nll_utils: dict,
         pixelwise: bool = False,
         full: bool = False,
         idx: Optional[xp.ndarray] = None,
@@ -36,8 +34,6 @@ class Hierarchical(ComponentDistribution):
     @abstractmethod
     def gradient_neglog_pdf(
         self,
-        forward_map_evals: dict[str, xp.ndarray],
-        nll_utils: dict[str, xp.ndarray],
         var_name: str,
     ) -> xp.ndarray:
         raise NotImplementedError
@@ -45,8 +41,6 @@ class Hierarchical(ComponentDistribution):
     @abstractmethod
     def hess_diag_neglog_pdf(
         self,
-        forward_map_evals: dict,
-        nll_utils: dict,
         var_name: str,
     ) -> xp.ndarray:
         raise NotImplementedError
