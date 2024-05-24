@@ -481,7 +481,7 @@ class MyGibbsSampler(Sampler):
             candidate_full = new_var * 1
             candidate_full[idx_pix, :] = mu_current * 1
 
-            candidate_all = target_distribution.compute_all(
+            candidate_all = target_distribution.compute_all( # TODO: not an efficient way to do so. compute_all computes the neglog_pdf for every pixel while only n_pix are needed. 
                 candidate_full,
                 compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
             )
@@ -497,7 +497,7 @@ class MyGibbsSampler(Sampler):
                 correction_cand = -(
                     (1 - self.alpha)
                     * diag_G_cand**2
-                    / xp.sqrt(v_cand)
+                    / (2*xp.sqrt(v_cand)) # NOTE: the factor 2 was missing in the initial approach. To be confirmed.
                     * grad_cand
                     * hess_diag_cand
                 )
@@ -623,10 +623,19 @@ class MyGibbsSampler(Sampler):
 
             # --- COMPUTE WEIGHTS (USING LOG)
             # Compute neglogpdf of candidates
-            neglogpdf_candidates = posterior.likelihood.neglog_pdf_candidates(
-                candidates_pix,
-                idx=idx_pix,
-                Theta_t=new_var * 1,  # self.current["Theta"] * 1
+            names_vars_involved = target_distribution.var_names
+            current_candidates = {var_name: None for var_name in names_vars_involved}
+            for var_name in names_vars_involved:
+                if var_name == key:
+                    current_candidates[var_name] = {'var': candidates_pix}
+                else:
+                    current_candidates[var_name] = {'var': xp.repeat(self.current[var_name]["var"][:, xp.newaxis, :], self.k_mtm + 1, axis=1)} # Add a dimension for the candidates.
+            
+            target_distribution.update_nlpdf_utils(current_candidates, idx_pix, compute_derivatives=False, compute_derivatives_2nd_order=False) # TODO: add the possibility to pass the idx_pix to the neglog_pdf method, improves the performance.
+            current_candidates = target_distribution.neglog_pdf( # TODO: check if the shape corresponds to the expected one
+                current_candidates,
+                compute_derivatives = False,
+                compute_derivatives_2nd_order = False,
             )  # (n_pix * (k_mtm+1),)
             assert neglogpdf_candidates.shape == (n_pix * (self.k_mtm + 1),)
 
@@ -739,5 +748,7 @@ class MyGibbsSampler(Sampler):
             self.v = new_v.flatten()
             assert xp.sum(xp.isnan(self.v)) == 0.0
             assert xp.sum(xp.isinf(self.v)) == 0.0
+        else:
+            pass #TODO: recompute compute_all for the original var
 
         return xp.mean(accept_total), xp.mean(log_rg_total)
