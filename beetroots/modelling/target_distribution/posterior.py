@@ -1,9 +1,11 @@
 from typing import Dict, Optional, Tuple, Union
 
+from beetroots.modelling.target_distribution.abstract_target_distribution import TargetDistribution
+
 import numpy as np
 
 
-class Posterior:
+class Posterior(TargetDistribution): #TODO: generalize for any number of likelihoods or priors.
 
     __slots__ = (
         "D",
@@ -26,14 +28,8 @@ class Posterior:
         separable: bool = True,
         dict_sites: Optional[Dict[int, np.ndarray]] = None,
     ):
-        self.D = D
-        """int: number of distinct physical parameters"""
-
-        self.L = L
-        """int: number of observables per pixel"""
-
-        self.N = N
-        """int: number of pixels"""
+        distribution_components = [likelihood, prior_spatial, prior_indicator] # not filtered for None
+        super().__init__(D, L, N, [dist_comp for dist_comp in distribution_components if dist_comp is not None], separable)
 
         self.likelihood = likelihood
         """Likelihood: data-fidelity term"""
@@ -50,7 +46,7 @@ class Posterior:
             self.dict_sites = dict_sites
         elif self.prior_spatial is not None:
             self.dict_sites = self.prior_spatial.dict_sites
-        elif separable is True:
+        elif separable is True: # all terms are independent (separable)
             self.dict_sites = {0: np.arange(self.N)}
         else:
             self.dict_sites = {n: np.array([n]) for n in range(self.N)}
@@ -124,9 +120,9 @@ class Posterior:
             nl_prior_spatial = self.prior_spatial.neglog_pdf(Theta, pixelwise=full)
             if full:
                 # nl_prior_spatial has shape (N, D), which needs to be
-                # converted to (N, D)
+                # converted to (N, L)
                 nl_prior_spatial = np.sum(nl_prior_spatial, axis=1)  # (N,)
-                nl_priors += nl_prior_spatial[:, None]  # (N, D)
+                nl_priors += nl_prior_spatial[:, None]  # (N, L)
             else:
                 nl_priors += np.sum(nl_prior_spatial)
 
@@ -280,9 +276,7 @@ class Posterior:
 
     def compute_all(
         self,
-        Theta: np.ndarray,
-        forward_map_evals: dict = {},
-        nll_utils: dict = {},
+        current_sampler: dict[str, dict], 
         compute_derivatives: bool = True,
         compute_derivatives_2nd_order: bool = True,
     ) -> dict:
@@ -304,6 +298,7 @@ class Posterior:
         dict[str, Union[float, np.ndarray]]
             negative log pdf and derivatives of the posterior distribution
         """
+        # TODO: adapt to current_sampler instead of Theta, forward_map_evals, nll_utils
         assert np.sum(np.isnan(Theta)) == 0, np.sum(np.isnan(Theta))
 
         if forward_map_evals == {}:

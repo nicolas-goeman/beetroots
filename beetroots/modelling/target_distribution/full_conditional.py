@@ -46,7 +46,6 @@ class FullConditional(TargetDistribution):
     @abstractmethod
     def neglog_pdf(
         self,
-        nlpdf_utils: dict,
         full: bool = False,
     ) -> float:
         pass
@@ -54,21 +53,18 @@ class FullConditional(TargetDistribution):
     @abstractmethod
     def grad_neglog_pdf(
         self,
-        nlpdf_utils: dict,
     ) -> xp.ndarray:
         pass
     
     @abstractmethod
     def hess_diag_neglog_pdf(
         self,
-        nlpdf_utils: dict,
     ) -> xp.ndarray:
         pass
 
     @abstractmethod
     def compute_all_for_saver(
         self,
-        nlpdf_utils: dict,
     ) -> Tuple[dict[str, Union[float, xp.ndarray]], xp.ndarray]:
         """computes negative log pdf of each component distribution and posterior (detailed values to be saved, not to be used in sampling)
 
@@ -91,7 +87,7 @@ class FullConditional(TargetDistribution):
     @abstractmethod
     def compute_all(
         self,
-        nlpdf_utils,
+        current_sampler,
         compute_derivatives: bool = True,
         compute_derivatives_2nd_order: bool = True,
     ) -> dict:

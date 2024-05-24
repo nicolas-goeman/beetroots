@@ -6,6 +6,7 @@ try:
 except ImportError:
     import numpy as xp  # Fallback to NumPy if CuPy is not installed
 
+from beetroots.modelling.component_distribution import ComponentDistribution
 
 class TargetDistribution(ABC):
 
@@ -13,6 +14,7 @@ class TargetDistribution(ABC):
         "D",
         "L",
         "N",
+        "dict_sites",
     )
 
     def __init__(
@@ -20,7 +22,8 @@ class TargetDistribution(ABC):
         D: int,
         L: int,
         N: int,
-        distribution_components: list,
+        distribution_components: dict[str: ComponentDistribution],
+        separable: bool = True
     ):
         self.D = D
         """int: number of distinct physical parameters"""
@@ -32,14 +35,21 @@ class TargetDistribution(ABC):
         """int: number of pixels"""
 
         self.distribution_components = distribution_components
-        """list: list of all distributions that compose the target distribution"""
+        """dict: dict of all distributions that compose the target distribution"""
+
+        self.var_names = list(distribution_components.keys())
+        """list: list of all variable names involved in the target distribution"""
+
+        if separable is True: # all terms are independent (separable)
+            self.dict_sites = {0: xp.arange(self.N)}
+        else:
+            self.dict_sites = {n: xp.array([n]) for n in range(self.N)}
 
         return
 
     @abstractmethod
     def neglog_pdf(
         self,
-        nlpdf_utils: dict,
         full: bool = False,
         **kwargs,
     ) -> float:
@@ -48,7 +58,6 @@ class TargetDistribution(ABC):
     @abstractmethod
     def grad_neglog_pdf(
         self,
-        nlpdf_utils: dict,
         **kwargs,
     ) -> xp.ndarray:
         pass
@@ -56,7 +65,6 @@ class TargetDistribution(ABC):
     @abstractmethod
     def hess_diag_neglog_pdf(
         self,
-        nlpdf_utils: dict,
         **kwargs,
     ) -> xp.ndarray:
         pass
@@ -64,7 +72,6 @@ class TargetDistribution(ABC):
     @abstractmethod
     def compute_all_for_saver(
         self,
-        nlpdf_utils: dict,
         **kwargs,
     ) -> Tuple[dict[str, Union[float, xp.ndarray]], xp.ndarray]:
         """computes negative log pdf of each component distribution and posterior (detailed values to be saved, not to be used in sampling)
@@ -88,7 +95,7 @@ class TargetDistribution(ABC):
     @abstractmethod
     def compute_all(
         self,
-        nlpdf_utils,
+        current_sampler: dict,
         compute_derivatives: bool = True,
         compute_derivatives_2nd_order: bool = True,
         **kwargs,
@@ -110,3 +117,13 @@ class TargetDistribution(ABC):
             negative log pdf and derivatives of the posterior distribution
         """
         pass
+
+    def update_nlpdf_utils(
+        self,
+        current: dict[str, dict],
+        idx_pix: Optional[xp.ndarray] = None,
+        **kwargs,
+    ) -> None:
+        for cd in self.distribution_components.values():
+            cd.evaluate_all_nlpdf_utils(current, idx_pix, **kwargs)
+
