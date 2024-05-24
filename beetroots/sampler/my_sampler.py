@@ -13,7 +13,7 @@ from beetroots.sampler.abstract_sampler import Sampler
 from beetroots.sampler.saver.abstract_saver import Saver
 from beetroots.sampler.utils import utils
 from beetroots.sampler.utils.mml import EBayesMMLELogRate
-from beetroots.sampler.utils.my_sampler_params import MySamplerParams
+from beetroots.sampler.utils.sampler_params import MySamplerParams
 
 
 class MySampler(Sampler):
