@@ -33,6 +33,8 @@ def build_list_edges(
     df_clusters = df_clusters["clusters"]
 
     list_edges = []
+
+    # here under we consider the 8 neighbors of a pixel or the 4 neighbors. We only have 4 or 2 elements respectively since like that we avoid duplicates.  The bottom right pixel neighbour j of pixel i will not be considered but once it is the turn of pixel j it will consider the pixel i as a neighbour. Therefore the edge is not missing and we don't have duplicates. 
     list_considered_neighbors = (
         [(1, 0), (0, 1), (1, 1), (-1, 1)]
         if use_next_nearest_neighbors
@@ -163,7 +165,7 @@ class SpatialPrior(PriorProbaDistribution):
         neglog_p : np.array of shape (D,)
             set of the D neg log priors evaluation
         """
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def neglog_pdf_one_pix(
@@ -181,7 +183,7 @@ class SpatialPrior(PriorProbaDistribution):
         neglog_p : np.array of shape (D,)
             set of the D neg log priors evaluation
         """
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def gradient_neglog_pdf(self, Theta: np.ndarray) -> np.ndarray:
@@ -197,7 +199,7 @@ class SpatialPrior(PriorProbaDistribution):
         np.array of shape (N, D)
             gradient of the spatial regularization
         """
-        pass
+        raise NotImplementedError
 
     @abc.abstractmethod
     def hess_diag_neglog_pdf(self, Theta: np.ndarray) -> np.ndarray:
@@ -213,4 +215,4 @@ class SpatialPrior(PriorProbaDistribution):
         np.array of shape (N, D)
             diagonal of the hessian of the spatial regularization
         """
-        pass
+        raise NotImplementedError

@@ -136,7 +136,7 @@ def _neglog_pdf_one_pix(
     np.ndarray of shape (N_candidates,)
         the leg log-prior of the candidates
     """
-    n_pix, k_mtm, D = list_pixel_candidates.shape
+    n_pix, k_mtm, D = list_pixel_candidates.shape # FIXME: not consistent with the doc above.
     neglog_p = np.zeros((n_pix, k_mtm, D))
     i = 0
     n_previous = -500_000
@@ -191,7 +191,7 @@ class L22LaplacianSpatialPrior(SpatialPrior):
 
         if with_weights:
             if pixelwise:
-                neglog_p = self.weights[None, :] * neglog_p
+                neglog_p *= self.weights[None, :]
             else:
                 neglog_p *= self.weights
 
@@ -222,7 +222,7 @@ class L22LaplacianSpatialPrior(SpatialPrior):
         Returns
         -------
         np.ndarray of shape (N_candidates,)
-            the leg log-prior of the candidates
+            the neg log-prior of the candidates
         """
         neglog_p = _neglog_pdf_one_pix(
             Theta, idx_pix, list_pixel_candidates, self.list_edges
@@ -259,3 +259,13 @@ class L22LaplacianSpatialPrior(SpatialPrior):
 
         # hess_diag /= self.N * self.D
         return self.weights[None, :] * hess_diag  # (N, D)
+
+    def evaluate_all_nlpdf_utils(
+        self, 
+        current: dict[str, dict],
+        idx_pix: Optional[np.ndarray],
+        compute_derivatives: bool,
+        compute_derivatives_2nd_order: bool,
+        ) -> None:
+        """Evaluate all utilities for the negative log-pdf and its eventual derivatives"""
+        raise NotImplementedError
