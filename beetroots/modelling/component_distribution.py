@@ -8,10 +8,16 @@ except ImportError:
 
 
 class ComponentDistribution(ABC):
+    r"""Abstract Base Class for a probability distribution on non-countable set"""
+
+    def __init__(
+        self,
+    ) -> None:
+        self.nlpdf_utils = {}
+
     @abstractmethod
     def neglog_pdf(
         self,
-        nlpdf_utils: dict,
         full: bool = False,
         **kwargs,
     ) -> float:
@@ -20,7 +26,6 @@ class ComponentDistribution(ABC):
     @abstractmethod
     def grad_neglog_pdf(
         self,
-        nlpdf_utils: dict,
         **kwargs,
     ) -> xp.ndarray:
         raise NotImplementedError
@@ -28,15 +33,17 @@ class ComponentDistribution(ABC):
     @abstractmethod
     def hess_diag_neglog_pdf(
         self,
-        nlpdf_utils: dict,
         **kwargs,
     ) -> xp.ndarray:
         raise NotImplementedError
     
     @abstractmethod
     def evaluate_all_nlpdf_utils(
-        self,
-        var: xp.ndarray,
-    ) -> dict:
-        """Evaluate all utilities for the negative log-pdf"""
+        self, 
+        current: dict[str, dict],
+        idx_pix: Optional[xp.ndarray],
+        compute_derivatives: bool,
+        compute_derivatives_2nd_order: bool,
+        ) -> None:
+        """Evaluate all utilities for the negative log-pdf and its eventual derivatives"""
         raise NotImplementedError
