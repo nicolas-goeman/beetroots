@@ -310,8 +310,9 @@ class CensoredLogNormalLikelihood(Likelihood):
 
     def evaluate_all_nlpdf_utils(
         self,
-        idx: Optional[np.ndarray] = None,
-        compute_derivatives: bool = True,
-        compute_derivatives_2nd_order: bool = True,
-    ) -> dict:
+        current: dict[str, dict],
+        idx: Optional[np.ndarray],
+        compute_derivatives: bool,
+        compute_derivatives_2nd_order: bool,
+    ) -> None:
         self.nlpdf_utils = {}

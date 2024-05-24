@@ -336,12 +336,6 @@ class MixingModelsLikelihood(Likelihood):
 
         Parameters
         ----------
-        lambda_ : np.ndarray of shape (N, L)
-            [description]
-        f_Var : np.ndarray of shape (N, L)
-            [description]
-        grad_f_Var : np.ndarray of shape (N, D, L)
-            [description]
 
         Returns
         -------
@@ -895,15 +889,20 @@ class MixingModelsLikelihood(Likelihood):
 
     def evaluate_all_nlpdf_utils(
         self,
+        current: dict[str, dict],
         idx: Optional[np.ndarray] = None,
         compute_derivatives: bool = True,
         compute_derivatives_2nd_order: bool = True,
-    ) -> dict:
+    ) -> None:
+        
+        self.evaluate_all_forward_map() # TODO: put variable and other required arguments here
+
         assert (
             np.sum(np.isnan(self.forward_map_evals["log_f_Var"])) == 0
         ), f"before entering bias and std : {np.sum(np.isnan(self.forward_map_evals['log_f_Var']))}"
 
-        nlpdf_utils = {}
+
+        self.nlpdf_utils = {}
         # * bias and variance
         if idx is None:
             N_pix = self.N * 1
@@ -952,9 +951,9 @@ class MixingModelsLikelihood(Likelihood):
             )  # .reshape((N_pix, self.L))            omega
 
         # * -----
-        nlpdf_utils["censored_mask"] = (y <= omega) * 1
-        nlpdf_utils["sigma_a"] = sigma_a * 1
-        nlpdf_utils["sigma_m"] = sigma_m * 1
+        self.nlpdf_utils["censored_mask"] = (y <= omega) * 1
+        self.nlpdf_utils["sigma_a"] = sigma_a * 1
+        self.nlpdf_utils["sigma_m"] = sigma_m * 1
 
         sigma_m2 = sigma_m**2
         log_combination = (
@@ -965,37 +964,37 @@ class MixingModelsLikelihood(Likelihood):
         # exp_sigma_m_squared_div2_m1 = np.exp(sigma_m2 / 2) - 1  # (N, L)
 
         # * computation of bias and variances
-        nlpdf_utils["m_a"] = np.zeros_like(y)
-        nlpdf_utils["s_a"] = sigma_a * np.sqrt(
+        self.nlpdf_utils["m_a"] = np.zeros_like(y)
+        self.nlpdf_utils["s_a"] = sigma_a * np.sqrt(
             (exp_sigma_m_squared - 1)
             * np.exp(2 * (self.forward_map_evals["log_f_Var"] - np.log(sigma_a)))
             + 1
         )
-        nlpdf_utils["s_a2"] = nlpdf_utils["s_a"] ** 2
+        self.nlpdf_utils["s_a2"] = self.nlpdf_utils["s_a"] ** 2
 
-        nlpdf_utils["m_m"] = -0.5 * (sigma_m2 + np.log(1 + 1 / exp_m2_log_combin))
+        self.nlpdf_utils["m_m"] = -0.5 * (sigma_m2 + np.log(1 + 1 / exp_m2_log_combin))
 
-        nlpdf_utils["s_m2"] = -2 * nlpdf_utils["m_m"]
-        nlpdf_utils["s_m"] = np.sqrt(nlpdf_utils["s_m2"])
+        self.nlpdf_utils["s_m2"] = -2 * self.nlpdf_utils["m_m"]
+        self.nlpdf_utils["s_m"] = np.sqrt(self.nlpdf_utils["s_m2"])
 
         assert (
-            nlpdf_utils["s_m"].min() > 0
-        ), f"{nlpdf_utils['s_m'].min()}, {(sigma_m2 - 2 * nlpdf_utils['m_m']).min()}"
+            self.nlpdf_utils["s_m"].min() > 0
+        ), f"{self.nlpdf_utils['s_m'].min()}, {(sigma_m2 - 2 * self.nlpdf_utils['m_m']).min()}"
 
         if compute_derivatives:
-            nlpdf_utils["grad_m_a"] = np.zeros((N_pix, self.D, self.L))
+            self.nlpdf_utils["grad_m_a"] = np.zeros((N_pix, self.D, self.L))
 
             if compute_derivatives_2nd_order:
-                nlpdf_utils["hess_diag_m_a"] = np.zeros((N_pix, self.D, self.L))
+                self.nlpdf_utils["hess_diag_m_a"] = np.zeros((N_pix, self.D, self.L))
 
-            nlpdf_utils["grad_s_a2"] = (
+            self.nlpdf_utils["grad_s_a2"] = (
                 2
                 * (self.forward_map_evals["f_Var"] * (exp_sigma_m_squared - 1))[:, None, :]
                 * self.forward_map_evals["grad_f_Var"]
             )  # (N, D, L)
 
             if compute_derivatives_2nd_order:
-                nlpdf_utils["hess_diag_s_a2"] = (
+                self.nlpdf_utils["hess_diag_s_a2"] = (
                     2
                     * (exp_sigma_m_squared - 1)[:, None, :]
                     * (
@@ -1005,26 +1004,26 @@ class MixingModelsLikelihood(Likelihood):
                     )
                 )  # (N, D, L)
 
-            nlpdf_utils["grad_s_a"] = (
-                1 / (2 * nlpdf_utils["s_a"])[:, None, :]
-            ) * nlpdf_utils["grad_s_a2"]
+            self.nlpdf_utils["grad_s_a"] = (
+                1 / (2 * self.nlpdf_utils["s_a"])[:, None, :]
+            ) * self.nlpdf_utils["grad_s_a2"]
 
             if compute_derivatives_2nd_order:
-                nlpdf_utils["hess_diag_s_a"] = (1 / (2 * nlpdf_utils["s_a2"]))[
+                self.nlpdf_utils["hess_diag_s_a"] = (1 / (2 * self.nlpdf_utils["s_a2"]))[
                     :, None, :
                 ] * (
-                    nlpdf_utils["hess_diag_s_a2"] * nlpdf_utils["s_a"][:, None, :]
-                    - nlpdf_utils["grad_s_a2"] * nlpdf_utils["grad_s_a"]
+                    self.nlpdf_utils["hess_diag_s_a2"] * self.nlpdf_utils["s_a"][:, None, :]
+                    - self.nlpdf_utils["grad_s_a2"] * self.nlpdf_utils["grad_s_a"]
                 )  # (N, D, L)
 
-            nlpdf_utils["grad_m_m"] = (
+            self.nlpdf_utils["grad_m_m"] = (
                 1 / (1 + exp_m2_log_combin) / self.forward_map_evals["f_Var"]
             )[:, None, :] * self.forward_map_evals[
                 "grad_f_Var"
             ]  # (N, D, L)
 
             if compute_derivatives_2nd_order:
-                nlpdf_utils["hess_diag_m_m"] = (
+                self.nlpdf_utils["hess_diag_m_m"] = (
                     1 / (self.forward_map_evals["f_Var"] * (1 + exp_m2_log_combin)) ** 2
                 )[:, None, :] * (
                     self.forward_map_evals["hess_diag_f_Var"]
@@ -1035,25 +1034,25 @@ class MixingModelsLikelihood(Likelihood):
                     * (1 + 3 * exp_m2_log_combin)[:, None, :]
                 )  # (N, D, L)
 
-            nlpdf_utils["grad_s_m2"] = -2 * nlpdf_utils["grad_m_m"]  # (N, D, L)
+            self.nlpdf_utils["grad_s_m2"] = -2 * self.nlpdf_utils["grad_m_m"]  # (N, D, L)
 
             if compute_derivatives_2nd_order:
-                nlpdf_utils["hess_diag_s_m2"] = (
-                    -2 * nlpdf_utils["hess_diag_m_m"]
+                self.nlpdf_utils["hess_diag_s_m2"] = (
+                    -2 * self.nlpdf_utils["hess_diag_m_m"]
                 )  # (N, D, L)
 
-            nlpdf_utils["grad_s_m"] = (1 / (2 * nlpdf_utils["s_m"]))[
+            self.nlpdf_utils["grad_s_m"] = (1 / (2 * self.nlpdf_utils["s_m"]))[
                 :, None, :
-            ] * nlpdf_utils[
+            ] * self.nlpdf_utils[
                 "grad_s_m2"
             ]  # (N, D, L)
 
             if compute_derivatives_2nd_order:
-                nlpdf_utils["hess_diag_s_m"] = (1 / (2 * nlpdf_utils["s_m2"]))[
+                self.nlpdf_utils["hess_diag_s_m"] = (1 / (2 * self.nlpdf_utils["s_m2"]))[
                     :, None, :
                 ] * (
-                    nlpdf_utils["hess_diag_s_m2"] * nlpdf_utils["s_m"][:, None, :]
-                    - nlpdf_utils["grad_s_m"] * nlpdf_utils["grad_s_m2"]
+                    self.nlpdf_utils["hess_diag_s_m2"] * self.nlpdf_utils["s_m"][:, None, :]
+                    - self.nlpdf_utils["grad_s_m"] * self.nlpdf_utils["grad_s_m2"]
                 )  # (N, D, L)
 
             # assert np.sum(np.isnan(self.forward_map_evals["f_Var"])) == 0.0
@@ -1112,48 +1111,28 @@ class MixingModelsLikelihood(Likelihood):
             # assert hess_diag_s_m.shape == (self.N, self.D, self.L)
 
         # * mixture weight
-        nlpdf_utils["lambda_"] = self.model_mixing_param(self.forward_map_evals, idx)
+        self.nlpdf_utils["lambda_"] = self.model_mixing_param(idx)
 
         if compute_derivatives:
-            nlpdf_utils["grad_lambda_"] = self.grad_model_mixing_param(self.forward_map_evals)
+            self.nlpdf_utils["grad_lambda_"] = self.grad_model_mixing_param()
             if compute_derivatives_2nd_order:
-                nlpdf_utils["hess_diag_lambda_"] = self.hess_diag_model_mixing_param(
+                self.nlpdf_utils["hess_diag_lambda_"] = self.hess_diag_model_mixing_param(
                     self.forward_map_evals
                 )
 
-        nlpdf_utils["nll_au"] = self.neglog_pdf_au(self.forward_map_evals, nlpdf_utils, y)
-        nlpdf_utils["nll_ac"] = self.neglog_pdf_ac(self.forward_map_evals, nlpdf_utils, y)
-        nlpdf_utils["nll_mu"] = self.neglog_pdf_mu(self.forward_map_evals, nlpdf_utils, log_y)
-        nlpdf_utils["nll_mc"] = self.neglog_pdf_mc(
-            self.forward_map_evals, nlpdf_utils, np.log(omega)
-        )
+        self.nlpdf_utils["nll_au"] = self.neglog_pdf_au(y)
+        self.nlpdf_utils["nll_ac"] = self.neglog_pdf_ac(y)
+        self.nlpdf_utils["nll_mu"] = self.neglog_pdf_mu(log_y)
+        self.nlpdf_utils["nll_mc"] = self.neglog_pdf_mc(np.log(omega))
 
         if compute_derivatives:
-            nlpdf_utils["grad_nll_au"] = self.gradient_neglog_pdf_au(
-                self.forward_map_evals, nlpdf_utils
-            )
-            nlpdf_utils["grad_nll_mu"] = self.gradient_neglog_pdf_mu(
-                self.forward_map_evals, nlpdf_utils
-            )
-            nlpdf_utils["grad_nll_ac"] = self.gradient_neglog_pdf_ac(
-                self.forward_map_evals, nlpdf_utils
-            )
-            nlpdf_utils["grad_nll_mc"] = self.gradient_neglog_pdf_mc(
-                self.forward_map_evals, nlpdf_utils
-            )
+            self.nlpdf_utils["grad_nll_au"] = self.gradient_neglog_pdf_au()
+            self.nlpdf_utils["grad_nll_mu"] = self.gradient_neglog_pdf_mu()
+            self.nlpdf_utils["grad_nll_ac"] = self.gradient_neglog_pdf_ac()
+            self.nlpdf_utils["grad_nll_mc"] = self.gradient_neglog_pdf_mc()
 
             if compute_derivatives_2nd_order:
-                nlpdf_utils["hess_diag_ac"] = self.hess_diag_neglog_pdf_ac(
-                    self.forward_map_evals, nlpdf_utils
-                )
-                nlpdf_utils["hess_diag_au"] = self.hess_diag_neglog_pdf_au(
-                    self.forward_map_evals, nlpdf_utils
-                )
-                nlpdf_utils["hess_diag_mc"] = self.hess_diag_neglog_pdf_mc(
-                    self.forward_map_evals, nlpdf_utils
-                )
-                nlpdf_utils["hess_diag_mu"] = self.hess_diag_neglog_pdf_mu(
-                    self.forward_map_evals, nlpdf_utils
-                )
-
-        self.nlpdf_utils = nlpdf_utils
+                self.nlpdf_utils["hess_diag_ac"] = self.hess_diag_neglog_pdf_ac()
+                self.nlpdf_utils["hess_diag_au"] = self.hess_diag_neglog_pdf_au()
+                self.nlpdf_utils["hess_diag_mc"] = self.hess_diag_neglog_pdf_mc()
+                self.nlpdf_utils["hess_diag_mu"] = self.hess_diag_neglog_pdf_mu()

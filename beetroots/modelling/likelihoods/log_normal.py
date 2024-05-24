@@ -202,9 +202,10 @@ class LogNormalLikelihood(Likelihood):
 
     def evaluate_all_nlpdf_utils(
         self,
-        idx: Optional[int] = None,
-        compute_derivatives: bool = False,
-        compute_derivatives_2nd_order: bool = True,
-    ) -> dict:
+        current: dict[str, dict],
+        idx: Optional[np.ndarray],
+        compute_derivatives: bool,
+        compute_derivatives_2nd_order: bool,
+    ) -> None:
         self.nlpdf_utils = {}
 

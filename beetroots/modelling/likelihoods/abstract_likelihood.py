@@ -134,8 +134,9 @@ class Likelihood(ComponentDistribution):
     @abstractmethod
     def evaluate_all_nlpdf_utils(
         self,
+        current: dict[str, dict],
         idx: Optional[np.ndarray],
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool,
-    ) -> dict[str, Union[float, np.ndarray]]:
+    ) -> None:
         raise NotImplementedError
