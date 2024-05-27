@@ -22,6 +22,7 @@ class TargetDistribution(ABC):
         D: int,
         L: int,
         N: int,
+        var_name: str,
         distribution_components: dict[str: ComponentDistribution],
         separable: bool = True
     ):
@@ -40,6 +41,9 @@ class TargetDistribution(ABC):
         self.var_names = list(distribution_components.keys())
         """list: list of all variable names involved in the target distribution"""
 
+        self_var_name = var_name
+        """str: name of the variable of the target distribution"""
+
         if separable is True: # all terms are independent (separable)
             self.dict_sites = {0: xp.arange(self.N)}
         else:
@@ -50,28 +54,34 @@ class TargetDistribution(ABC):
     @abstractmethod
     def neglog_pdf(
         self,
-        full: bool = False,
-        **kwargs,
+        current: dict[str, Union[dict, float, xp.ndarray]],
+        idx_pix: Optional[xp.ndarray] = None,
+        pixelwise: bool = False,
     ) -> float:
         pass
 
     @abstractmethod
     def grad_neglog_pdf(
         self,
-        **kwargs,
+        current: dict[dict[str, xp.ndarray]],
+        idx_pix: Optional[xp.ndarray] = None,
+        update_nlpdf_utils: bool = True,
     ) -> xp.ndarray:
         pass
     
     @abstractmethod
     def hess_diag_neglog_pdf(
         self,
-        **kwargs,
+        current: dict[dict[str, xp.ndarray]] = None,
+        idx_pix: Optional[xp.ndarray] = None,
+        update_nlpdf_utils: bool = True,
     ) -> xp.ndarray:
         pass
 
     @abstractmethod
     def compute_all_for_saver(
         self,
+        current: dict[str, dict],
         **kwargs,
     ) -> Tuple[dict[str, Union[float, xp.ndarray]], xp.ndarray]:
         """computes negative log pdf of each component distribution and posterior (detailed values to be saved, not to be used in sampling)
@@ -122,8 +132,10 @@ class TargetDistribution(ABC):
         self,
         current: dict[str, dict],
         idx_pix: Optional[xp.ndarray] = None,
+        compute_derivatives: bool = True,
+        compute_derivatives_2nd_order: bool = True,
         **kwargs,
     ) -> None:
         for cd in self.distribution_components.values():
-            cd.evaluate_all_nlpdf_utils(current, idx_pix, **kwargs)
+            cd.evaluate_all_nlpdf_utils(current, idx_pix, compute_derivatives, compute_derivatives_2nd_order, **kwargs)
 

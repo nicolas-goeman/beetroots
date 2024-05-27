@@ -2,7 +2,10 @@ from typing import Dict, Optional, Tuple, Union
 
 from beetroots.modelling.target_distribution.abstract_target_distribution import TargetDistribution
 
-import numpy as np
+try:
+    import cupy as xp
+except:
+    import numpy as xp
 
 
 class Posterior(TargetDistribution): #TODO: generalize for any number of likelihoods or priors.
@@ -22,14 +25,15 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
         D: int,
         L: int,
         N: int,
+        var_name: str,
         likelihood,
         prior_spatial=None,
         prior_indicator=None,
         separable: bool = True,
-        dict_sites: Optional[Dict[int, np.ndarray]] = None,
+        dict_sites: Optional[Dict[int, xp.ndarray]] = None,
     ):
         distribution_components = [likelihood, prior_spatial, prior_indicator] # not filtered for None
-        super().__init__(D, L, N, [dist_comp for dist_comp in distribution_components if dist_comp is not None], separable)
+        super().__init__(D, L, N, var_name, [dist_comp for dist_comp in distribution_components if dist_comp is not None], separable)
 
         self.likelihood = likelihood
         """Likelihood: data-fidelity term"""
@@ -41,315 +45,245 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
         """SmoothIndicatorPrior: prior term encoding validity intervals"""
 
         self.dict_sites = {}
-        """dict[int, np.ndarray]: sites for pixels to be sampled in parallel in the MTM-chromoatic Gibbs kernel"""
+        """dict[int, xp.ndarray]: sites for pixels to be sampled in parallel in the MTM-chromoatic Gibbs kernel"""
         if dict_sites is not None:
             self.dict_sites = dict_sites
         elif self.prior_spatial is not None:
             self.dict_sites = self.prior_spatial.dict_sites
         elif separable is True: # all terms are independent (separable)
-            self.dict_sites = {0: np.arange(self.N)}
+            self.dict_sites = {0: xp.arange(self.N)}
         else:
-            self.dict_sites = {n: np.array([n]) for n in range(self.N)}
+            self.dict_sites = {n: xp.array([n]) for n in range(self.N)}
 
         return
 
-    def partial_neglog_pdf_priors(
-        self,
-        Theta: np.ndarray,
-        idx_pix: np.ndarray,
-        list_pixel_candidates: np.ndarray,
-        spatial_weights: Optional[np.ndarray] = None,
-        use_indicator_prior: bool = True,
-        use_spatial_prior: bool = True
-        # compute_indicator: bool = False,
-    ) -> np.ndarray:
-        r"""computes the neg log-prior when only one pixel is modified
-
-        Parameters
-        ----------
-        Theta : np.ndarray of shape (N, D)
-            current iterate
-        idx_pix : int
-            the index of the pixel to consider (0 <= idx_pix <= N - 1)
-        list_pixel_candidates : np.ndarray of shape (N_candidates, D)
-            the list of all candidates for pixel idx_pi
-        spatial_weights : Optional[np.ndarray], optional
-            vector of shape (D,) containing the weights of the spatial prior, by default None
-        use_indicator_prior : bool, optional
-            wether to use the indicator prior term, by default True
-        use_spatial_prior : bool, optional
-            wether to use the spatial prior term, by default True
-
-        Returns
-        -------
-        np.ndarray of shape (N_candidates,)
-            the negative log-prior of the candidates
-        """
-        n_pix, k_mtm, D = list_pixel_candidates.shape
-        assert n_pix == idx_pix.size
-        assert D == Theta.shape[1]
-
-        nl_priors = np.zeros((n_pix, k_mtm))
-        if self.prior_spatial is not None and use_spatial_prior:
-            nl_priors_spatial = self.prior_spatial.neglog_pdf_one_pix(
-                Theta, idx_pix, list_pixel_candidates, spatial_weights
-            )  # (n_pix, k_mtm)
-            nl_priors += nl_priors_spatial
-
-        if self.prior_indicator is not None and use_indicator_prior:
-            list_pixel_candidates_reshaped = list_pixel_candidates.reshape(
-                (n_pix * k_mtm, D)
-            )
-            nl_priors_indicator = self.prior_indicator.neglog_pdf_one_pix(
-                list_pixel_candidates_reshaped
-            )
-            nl_priors += nl_priors_indicator.reshape((n_pix, k_mtm))
-        return nl_priors
-
     def neglog_pdf_priors(
         self,
-        Theta: np.ndarray,
-        full: bool = False,
-    ) -> Union[float, np.ndarray]:
-        if full:
-            nl_priors = np.zeros((self.N, self.L))
+        Theta: xp.ndarray,
+        idx_pix: Optional[xp.ndarray] = None,
+        pixelwise: bool = False,
+    ) -> Union[float, xp.ndarray]:
+        if pixelwise:
+            nl_priors = xp.zeros((self.N, self.L))
         else:
             nl_priors = 0.0
 
         if self.prior_spatial is not None:
-            nl_prior_spatial = self.prior_spatial.neglog_pdf(Theta, pixelwise=full)
-            if full:
+            nl_prior_spatial = self.prior_spatial.neglog_pdf(Theta, idx_pix, pixelwise=pixelwise)
+            if pixelwise:
                 # nl_prior_spatial has shape (N, D), which needs to be
                 # converted to (N, L)
-                nl_prior_spatial = np.sum(nl_prior_spatial, axis=1)  # (N,)
+                nl_prior_spatial = xp.sum(nl_prior_spatial, axis=1)  # (N,)
                 nl_priors += nl_prior_spatial[:, None]  # (N, L)
             else:
-                nl_priors += np.sum(nl_prior_spatial)
+                nl_priors += xp.sum(nl_prior_spatial)
 
         if self.prior_indicator is not None:
-            nl_prior_ind = self.prior_indicator.neglog_pdf(Theta, pixelwise=full)
-            if full:
+            nl_prior_ind = self.prior_indicator.neglog_pdf(Theta, pixelwise=pixelwise)
+            if pixelwise:
                 nl_priors += nl_prior_ind[:, None]
             else:
-                nl_priors += np.sum(nl_prior_ind)
+                nl_priors += xp.sum(nl_prior_ind)
 
         return nl_priors
 
     def neglog_pdf(
         self,
-        Theta: np.ndarray,
-        forward_map_evals: dict,
-        nll_utils: dict,
-        full: bool = False,
+        current: dict[str, Union[dict, float, xp.ndarray]],
+        idx_pix: Optional[xp.ndarray] = None,
+        pixelwise: bool = False,
     ) -> float:
-        if full:
-            out = np.zeros((self.N, self.L))
+        if pixelwise:
+            out = xp.zeros((self.N, self.L))
         else:
             out = 0.0
 
-        out += self.likelihood.neglog_pdf(
-            forward_map_evals,
-            nll_utils,
-            full=full,
-        )
+        self.likelihood.evaluate_all_nlpdf_utils(current, compute_derivatives=False, compute_derivatives_2nd_order=False)
+        out += self.likelihood.neglog_pdf(pixelwise=pixelwise,) # NOTE: idx_pix not required because it is only required in the evaluate_all_nlpdf_utils method. It computes everything while taking care of nlpdf_utils.
 
-        out += self.neglog_pdf_priors(Theta, full=full)
+        out += self.neglog_pdf_priors(current[self.var_name]['var'], idx_pix=idx_pix, pixelwise=pixelwise)
 
-        # assert np.sum(np.isnan(nll)) == 0, np.sum(np.isnan(nll))
-        # assert np.sum(np.isnan(nl_priors)) == 0, np.sum(np.isnan(nl_priors)) 
+        # assert xp.sum(xp.isnan(nll)) == 0, xp.sum(xp.isnan(nll))
+        # assert xp.sum(xp.isnan(nl_priors)) == 0, xp.sum(xp.isnan(nl_priors)) 
         return out
 
     def grad_neglog_pdf(
         self,
-        Theta: np.ndarray,
-        forward_map_evals: dict[str, Union[float, np.ndarray]],
-        nll_utils: dict[str, Union[float, np.ndarray]],
-    ) -> np.ndarray:
-        grad_ = self.likelihood.gradient_neglog_pdf(
-            forward_map_evals, nll_utils
-        )  # (N, D)
+        current: dict[dict[str, xp.ndarray]],
+        idx_pix: Optional[xp.ndarray] = None,
+        update_nlpdf_utils: bool = True,
+    ) -> xp.ndarray:
+        if update_nlpdf_utils and current is None:
+            raise ValueError("current is None, cannot update nlpdf_utils")
+        elif update_nlpdf_utils and current is not None:
+            self.update_nlpdf_utils(current, idx_pix=idx_pix, compute_derivatives=True, compute_derivatives_2nd_order=True)
+
+        grad_ = self.likelihood.gradient_neglog_pdf()  # (N, D)
         # assert grad_.shape == (self.N, self.D), grad_nll.shape
 
         if self.prior_spatial is not None:
-            # grad_nl_prior_spatial = self.prior_spatial.gradient_neglog_pdf(Theta)
+            # grad_nl_prior_spatial = self.prior_spatial.gradient_neglog_pdf()
             # assert grad_nl_prior_spatial.shape == (self.N, self.D)
             # assert (
-            #     np.sum(np.isnan(grad_nl_prior_spatial)) == 0
-            # ), f"nan grad prior spatial {np.sum(np.isnan(grad_nl_prior_spatial))}"
-            grad_ += self.prior_spatial.gradient_neglog_pdf(Theta)
+            #     xp.sum(xp.isnan(grad_nl_prior_spatial)) == 0
+            # ), f"nan grad prior spatial {xp.sum(xp.isnan(grad_nl_prior_spatial))}"
+            grad_ += self.prior_spatial.gradient_neglog_pdf(current_var=current[self.var_name]["var"])
 
         if self.prior_indicator is not None:
-            # grad_nl_prior_indicator = self.prior_indicator.gradient_neglog_pdf(Theta)
+            # grad_nl_prior_indicator = self.prior_indicator.gradient_neglog_pdf()
             # assert grad_nl_prior_indicator.shape == (self.N, self.D)
             # assert (
-            #     np.sum(np.isnan(grad_nl_prior_indicator)) == 0
-            # ), f"nan grad prior indicator {np.sum(np.isnan(grad_nl_prior_indicator))}"
-            grad_ += self.prior_indicator.gradient_neglog_pdf(Theta)
+            #     xp.sum(xp.isnan(grad_nl_prior_indicator)) == 0
+            # ), f"nan grad prior indicator {xp.sum(xp.isnan(grad_nl_prior_indicator))}"
+            grad_ += self.prior_indicator.gradient_neglog_pdf(current_var=current[self.var_name]["var"])
 
-        grad_ = np.nan_to_num(grad_)
+        grad_ = xp.nan_to_num(grad_)
         return grad_
 
     def hess_diag_neglog_pdf(
         self,
-        Theta: np.ndarray,
-        forward_map_evals: dict,
-        nll_utils: dict,
-    ) -> np.ndarray:
-        hess_diag = self.likelihood.hess_diag_neglog_pdf(
-            forward_map_evals, nll_utils
-        )  # (N, D)
+        current: dict[dict[str, xp.ndarray]] = None,
+        idx_pix: Optional[xp.ndarray] = None,
+        update_nlpdf_utils: bool = True,
+    ) -> xp.ndarray:
+        if update_nlpdf_utils and current is None:
+            raise ValueError("current is None, cannot update nlpdf_utils")
+        elif update_nlpdf_utils and current is not None:
+            self.update_nlpdf_utils(current, idx_pix=idx_pix, compute_derivatives=True, compute_derivatives_2nd_order=True)
+    
+        hess_diag = self.likelihood.hess_diag_neglog_pdf()  # (N, D)
         # assert hess_diag.shape == (self.N, self.D)
 
         if self.prior_spatial is not None:
-            # hess_diag_nl_prior_spatial = self.prior_spatial.hess_diag_neglog_pdf(Theta)
-            # assert np.sum(np.isnan(hess_diag_nl_prior_spatial)) == 0
+            # hess_diag_nl_prior_spatial = self.prior_spatial.hess_diag_neglog_pdf()
+            # assert xp.sum(xp.isnan(hess_diag_nl_prior_spatial)) == 0
             # assert hess_diag_nl_prior_spatial.shape == (self.N, self.D)
-            hess_diag += self.prior_spatial.hess_diag_neglog_pdf(Theta)
+            hess_diag += self.prior_spatial.hess_diag_neglog_pdf(current_var=current[self.var_name]["var"])
 
         if self.prior_indicator is not None:
-            # hess_diag_nl_prior_indicator = self.prior_indicator.hess_diag_neglog_pdf(Theta)
-            # assert np.sum(np.isnan(hess_diag_nl_prior_indicator)) == 0
+            # hess_diag_nl_prior_indicator = self.prior_indicator.hess_diag_neglog_pdf()
+            # assert xp.sum(xp.isnan(hess_diag_nl_prior_indicator)) == 0
             # assert hess_diag_nl_prior_indicator.shape == (self.N, self.D)
-            hess_diag += self.prior_indicator.hess_diag_neglog_pdf(Theta)
+            hess_diag += self.prior_indicator.hess_diag_neglog_pdf(current_var=current[self.var_name]["var"])
 
-        hess_diag = np.nan_to_num(hess_diag)
+        hess_diag = xp.nan_to_num(hess_diag)
         return hess_diag
 
     def compute_all_for_saver(
         self,
-        Theta: np.ndarray,
-        forward_map_evals: dict[str, Union[float, np.ndarray]],
-        nll_utils: dict,
-    ) -> Tuple[dict[str, Union[float, np.ndarray]], np.ndarray]:
+        current: dict[str, dict], 
+    ) -> Tuple[dict[str, Union[float, xp.ndarray]], xp.ndarray]:
         """computes negative log pdf of likelihood, priors and posterior (detailed values to be saved, not to be used in sampling)
 
         Parameters
         ----------
-        Theta : np.ndarray of shape (N, D)
+        Theta : xp.ndarray of shape (N, D)
             current iterate
-        forward_map_evals : dict[str, Union[float, np.ndarray]]
+        forward_map_evals : dict[str, Union[float, xp.ndarray]]
             output of the ``likelihood.evaluate_all_forward_map()`` method
-        nll_utils : [str, Union[float, np.ndarray]]
+        nll_utils : [str, Union[float, xp.ndarray]]
             output of the ``likelihood.evaluate_all_nll_utils()`` method
 
         Returns
         -------
-        dict[str, Union[float, np.ndarray]]
+        dict[str, Union[float, xp.ndarray]]
             values to be saved
         """
-        assert Theta.shape == (self.N, self.D)
+        # TODO: Adapt to the new implementation
+        assert xp.sum(xp.isnan(current[self.var_name]["var"])) == 0, xp.sum(xp.isnan(current[self.var_name]["var"]))
         dict_objective = dict()
 
-        nll_full = self.likelihood.neglog_pdf(
-            forward_map_evals,
-            nll_utils,
-            full=True,
+        nll_pixelwise = self.likelihood.neglog_pdf(
+            pixelwise=True,
         )  # (N, L)
 
         assert isinstance(
-            nll_full, np.ndarray
-        ), "nll_full shoud be an array, check likelihood.neglog_pdf method"
-        assert nll_full.shape == (
+            nll_pixelwise, xp.ndarray
+        ), "nll_pixelwise shoud be an array, check likelihood.neglog_pdf method"
+        assert nll_pixelwise.shape == (
             self.N,
             self.L,
-        ), f"nll_full with wrong shape. is {nll_full.shape}, should be {(self.N, self.L)}"
+        ), f"nll_pixelwise with wrong shape. is {nll_pixelwise.shape}, should be {(self.N, self.L)}"
 
-        dict_objective["nll"] = np.sum(nll_full)  # float
+        dict_objective["nll"] = xp.sum(nll_pixelwise)  # float
 
         if self.prior_spatial is not None:
-            nl_prior_spatial = self.prior_spatial.neglog_pdf(Theta)
+            nl_prior_spatial = self.prior_spatial.neglog_pdf(current[self.var_name]["var"])
             dict_objective["nl_prior_spatial"] = nl_prior_spatial  # (D,)
         else:
-            nl_prior_spatial = np.zeros((self.D,))
+            nl_prior_spatial = xp.zeros((self.D,))
 
         if self.prior_indicator is not None:
-            nl_prior_indicator = self.prior_indicator.neglog_pdf(Theta)
+            nl_prior_indicator = self.prior_indicator.neglog_pdf(current[self.var_name]["var"])
             dict_objective["nl_prior_indicator"] = nl_prior_indicator  # (D,)
         else:
-            nl_prior_indicator = np.zeros((self.D,))
+            nl_prior_indicator = xp.zeros((self.D,))
 
-        nl_posterior = np.sum(nll_full) + np.sum(nl_prior_spatial)
-        nl_posterior += np.sum(nl_prior_indicator)
+        nl_posterior = xp.sum(nll_pixelwise) + xp.sum(nl_prior_spatial)
+        nl_posterior += xp.sum(nl_prior_indicator)
         dict_objective["objective"] = nl_posterior
 
-        return dict_objective, nll_full
+        return dict_objective, nll_pixelwise
 
     def compute_all(
         self,
-        current_sampler: dict[str, dict], 
+        current: dict[str, dict], 
         compute_derivatives: bool = True,
         compute_derivatives_2nd_order: bool = True,
+        update_nlpdf_utils: bool = True,
     ) -> dict:
         r"""compute negative log pdf and derivatives of the posterior distribution
 
         Parameters
         ----------
-        Theta : np.ndarray of shape (N, D)
+        Theta : xp.ndarray of shape (N, D)
             current iterate
-        forward_map_evals : dict[str, np.ndarray], optional
+        forward_map_evals : dict[str, xp.ndarray], optional
             output of the ``likelihood.evaluate_all_forward_map()`` method, by default {}
-        nll_utils : dict[str, np.ndarray], optional
+        nll_utils : dict[str, xp.ndarray], optional
             output of the ``likelihood.evaluate_all_nll_utils()`` method, by default {}
         compute_derivatives : bool, optional
             wether to compte derivatives, by default True
 
         Returns
         -------
-        dict[str, Union[float, np.ndarray]]
+        dict[str, Union[float, xp.ndarray]]
             negative log pdf and derivatives of the posterior distribution
         """
         # TODO: adapt to current_sampler instead of Theta, forward_map_evals, nll_utils
-        assert np.sum(np.isnan(Theta)) == 0, np.sum(np.isnan(Theta))
+        assert xp.sum(xp.isnan(current[self.var_name]["var"])) == 0, xp.sum(xp.isnan(current[self.var_name]["var"]))
 
-        if forward_map_evals == {}:
-            forward_map_evals = self.likelihood.evaluate_all_forward_map(
-                Theta, compute_derivatives, compute_derivatives_2nd_order
-            )
-        
-        # It is usually empty, it is not when regularizing params have been updated (once per iteration)
-        if nll_utils == {}:
-            nll_utils = self.likelihood.evaluate_all_nll_utils(
-                forward_map_evals,
-                None,
-                compute_derivatives,
-                compute_derivatives_2nd_order,
-            )
+        if update_nlpdf_utils:
+            self.update_nlpdf_utils(current, compute_derivatives=compute_derivatives, compute_derivatives_2nd_order=compute_derivatives_2nd_order)
 
-        nll = self.likelihood.neglog_pdf(forward_map_evals, nll_utils)
-        nll_utils["nll"] = nll  # float
+        nlpdf_utils = {}
+        nll = self.likelihood.neglog_pdf()
+        nlpdf_utils["nll"] = nll  # float
 
         if self.prior_indicator is not None:
-            nl_prior_indicator = self.prior_indicator.neglog_pdf(Theta)
+            nl_prior_indicator = self.prior_indicator.neglog_pdf(current[self.var_name]["var"])
         else:
-            nl_prior_indicator = np.zeros((self.D,))
-        nll_utils["nl_prior_indicator"] = nl_prior_indicator
+            nl_prior_indicator = xp.zeros((self.D,))
+        nlpdf_utils["nl_prior_indicator"] = nl_prior_indicator
 
-        nlpdf_full = self.neglog_pdf(
-            Theta,
-            forward_map_evals,
-            nll_utils,
-            full=True,
+        nlpdf_pixelwise = self.neglog_pdf(
+            current,
+            pixelwise=True,
         )  # (N, L)
-        nlpdf_pix = np.sum(nlpdf_full, axis=1)
+        nlpdf_pix = xp.sum(nlpdf_pixelwise, axis=1)
 
         iterate = {
-            "Theta": Theta,
-            "forward_map_evals": forward_map_evals,
-            "nll_utils": nll_utils,
+            "var": current[self.var_name]["var"],
+            "forward_map_evals": self.likelihood.forward_map_evals,
+            "nll_utils": nlpdf_utils,
             "objective_pix": nlpdf_pix,
         }
-        iterate["objective"] = np.sum(nlpdf_pix)
+
+        iterate["objective"] = xp.sum(nlpdf_pix)
+
         if compute_derivatives:
-            iterate["grad"] = self.grad_neglog_pdf(
-                Theta,
-                forward_map_evals,
-                nll_utils,
-            )
+            iterate["grad"] = self.grad_neglog_pdf(update_nlpdf_utils=False)
             if compute_derivatives_2nd_order:
-                iterate["hess_diag"] = self.hess_diag_neglog_pdf(
-                    Theta,
-                    forward_map_evals,
-                    nll_utils,
-                )
+                iterate["hess_diag"] = self.hess_diag_neglog_pdf(update_nlpdf_utils=False)
 
         return iterate

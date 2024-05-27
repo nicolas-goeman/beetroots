@@ -46,42 +46,36 @@ class FullConditional(TargetDistribution):
     @abstractmethod
     def neglog_pdf(
         self,
-        full: bool = False,
+        current: dict[str, Union[dict, float, xp.ndarray]],
+        idx_pix: Optional[xp.ndarray] = None,
+        pixelwise: bool = False,
     ) -> float:
         pass
 
     @abstractmethod
     def grad_neglog_pdf(
         self,
+        current: dict[dict[str, xp.ndarray]],
+        idx_pix: Optional[xp.ndarray] = None,
+        update_nlpdf_utils: bool = True,
     ) -> xp.ndarray:
         pass
     
     @abstractmethod
     def hess_diag_neglog_pdf(
         self,
+        current: dict[dict[str, xp.ndarray]] = None,
+        idx_pix: Optional[xp.ndarray] = None,
+        update_nlpdf_utils: bool = True,
     ) -> xp.ndarray:
         pass
 
     @abstractmethod
     def compute_all_for_saver(
         self,
+        current: dict[str, dict],
+        **kwargs,
     ) -> Tuple[dict[str, Union[float, xp.ndarray]], xp.ndarray]:
-        """computes negative log pdf of each component distribution and posterior (detailed values to be saved, not to be used in sampling)
-
-        Parameters
-        ----------
-        Theta : np.ndarray of shape (N, D)
-            current iterate
-        forward_map_evals : dict[str, Union[float, np.ndarray]]
-            output of the ``likelihood.evaluate_all_forward_map()`` method
-        nll_utils : [str, Union[float, np.ndarray]]
-            output of the ``likelihood.evaluate_all_nll_utils()`` method
-
-        Returns
-        -------
-        dict[str, Union[float, np.ndarray]]
-            values to be saved
-        """
         pass
 
     @abstractmethod
