@@ -1,92 +1,97 @@
 from typing import Optional
 
-import numba
-import numpy as np
+import numba as nb
+try:
+    import cupy as xp
+    decorator_nb = nb.cuda.jit
+except:
+    import numpy as xp
+    decorator_nb = nb.njit
 
 from beetroots.modelling.priors.abstract_spatial_prior import SpatialPrior
 
 
-@numba.njit()
-def compute_laplacian(Theta: np.ndarray, list_edges: np.ndarray) -> np.ndarray:
+@decorator_nb()
+def compute_laplacian(Var: xp.ndarray, list_edges: xp.ndarray) -> xp.ndarray:
     r"""evaluates the image Laplacian for each of the D maps, :math:`\Delta \Theta_{\cdot d}`
 
     Parameters
     ----------
-    Theta : np.ndarray of shape (N, D)
+    Var : xp.ndarray of shape (N, D)
         D vectors of N pixels
-    list_edges : np.ndarray
+    list_edges : xp.ndarray
         set of edges in the graph induced by the spatial regularization
 
     Returns
     -------
-    np.ndarray of shape (N, D)
+    xp.ndarray of shape (N, D)
         image Laplacian for each of the D maps
     """
-    laplacian_ = np.zeros_like(Theta)
+    laplacian_ = xp.zeros_like(Var)
     N = laplacian_.shape[0]
 
     for i in range(N):
         mask_i_m = list_edges[:, 1] == i
         mask_i_p = list_edges[:, 0] == i
 
-        laplacian_[i] += np.sum(
-            (Theta[list_edges[mask_i_p, 1], :] - Theta[list_edges[mask_i_p, 0], :]),
+        laplacian_[i] += xp.sum(
+            (Var[list_edges[mask_i_p, 1], :] - Var[list_edges[mask_i_p, 0], :]),
             axis=0,
         )
-        laplacian_[i] -= np.sum(
-            (Theta[list_edges[mask_i_m, 1], :] - Theta[list_edges[mask_i_m, 0], :]),
+        laplacian_[i] -= xp.sum(
+            (Var[list_edges[mask_i_m, 1], :] - Var[list_edges[mask_i_m, 0], :]),
             axis=0,
         )
     return laplacian_  # (N, D)
 
 
-@numba.njit()
+@decorator_nb()
 def compute_laplacian_local(
-    Theta: np.ndarray, n: int, list_edges: np.ndarray, list_pixel_candidates: np.ndarray
-) -> np.ndarray:
+    Var: xp.ndarray, n: int, list_edges: xp.ndarray, list_pixel_candidates: xp.ndarray
+) -> xp.ndarray:
     """computes the local laplacian only for the one modified pixel
 
     Parameters
     ----------
-    Theta : np.ndarray of shape (N, D)
+    Var : xp.ndarray of shape (N, D)
         current iterate
 
     n : int
         the index of the pixel to consider (:math:`0 \leq n \leq N - 1`)
 
-    list_pixel_candidates : np.ndarray of shape (N_candidates, D)
+    list_pixel_candidates : xp.ndarray of shape (N_candidates, D)
         the list of all candidates for pixel n
 
     Returns
     -------
-    laplacian_ : np.ndarray of shape (N_candidates, D)
+    laplacian_ : xp.ndarray of shape (N_candidates, D)
         the laplacian of the candidates
     """
-    # D = Theta.shape[1]
+    # D = Var.shape[1]
     N_candidates = list_pixel_candidates.shape[0]
-    laplacian_ = np.zeros_like(list_pixel_candidates)
+    laplacian_ = xp.zeros_like(list_pixel_candidates)
 
     mask_i_m = list_edges[:, 1] == n
     mask_i_p = list_edges[:, 0] == n
 
     for i in range(N_candidates):
-        Theta[n] = list_pixel_candidates[i] * 1
+        Var[n] = list_pixel_candidates[i] * 1
 
-        laplacian_[i] += np.sum(
-            (Theta[list_edges[mask_i_p, 1], :] - Theta[list_edges[mask_i_p, 0], :]),
+        laplacian_[i] += xp.sum(
+            (Var[list_edges[mask_i_p, 1], :] - Var[list_edges[mask_i_p, 0], :]),
             axis=0,
         )  # (D,)
-        laplacian_[i] -= np.sum(
-            (Theta[list_edges[mask_i_m, 1], :] - Theta[list_edges[mask_i_m, 0], :]),
+        laplacian_[i] -= xp.sum(
+            (Var[list_edges[mask_i_m, 1], :] - Var[list_edges[mask_i_m, 0], :]),
             axis=0,
         )  # (D,)
     return laplacian_  # (N_candidates, D)
 
 
-@numba.njit()
+@decorator_nb()
 def compute_gradient_from_laplacian(
-    laplacian_: np.ndarray, list_edges: np.ndarray
-) -> np.ndarray:
+    laplacian_: xp.ndarray, list_edges: xp.ndarray
+) -> xp.ndarray:
     """evaluates the gradient from the Laplacian matrix
 
     Parameters
@@ -98,10 +103,10 @@ def compute_gradient_from_laplacian(
 
     Returns
     -------
-    np.ndarray
+    xp.ndarray
         _description_
     """
-    g = np.zeros_like(laplacian_)
+    g = xp.zeros_like(laplacian_)
 
     for edge in list_edges:
         val = 2 * (laplacian_[edge[1]] - laplacian_[edge[0]])  # (D,)
@@ -111,33 +116,33 @@ def compute_gradient_from_laplacian(
     return g  # (N, D)
 
 
-@numba.njit()
+@decorator_nb()
 def _neglog_pdf_one_pix(
-    Theta: np.ndarray,
-    idx_pix: np.ndarray,
-    list_pixel_candidates: np.ndarray,
-    list_edges: np.ndarray,
-) -> np.ndarray:
+    Var: xp.ndarray,
+    idx_pix: xp.ndarray,
+    list_pixel_candidates: xp.ndarray,
+    list_edges: xp.ndarray,
+) -> xp.ndarray:
     """computes the neg log-prior when only one pixel is modified
 
     Parameters
     ----------
-    Theta : np.ndarray of shape (N, D)
+    Var : xp.ndarray of shape (N, D)
         current iterate
 
-    idx_pix : np.ndarray
+    idx_pix : xp.ndarray
         array of the indices of the pixels to consider (:math:`0 \leq n \leq N - 1`)
 
-    list_pixel_candidates : np.ndarray of shape (N_candidates, D)
+    list_pixel_candidates : xp.ndarray of shape (N_candidates, D)
         the list of all candidates for pixel n
 
     Returns
     -------
-    np.ndarray of shape (N_candidates,)
+    xp.ndarray of shape (N_candidates,)
         the leg log-prior of the candidates
     """
     n_pix, k_mtm, D = list_pixel_candidates.shape # FIXME: not consistent with the doc above.
-    neglog_p = np.zeros((n_pix, k_mtm, D))
+    neglog_p = xp.zeros((n_pix, k_mtm, D))
     i = 0
     n_previous = -500_000
 
@@ -149,7 +154,7 @@ def _neglog_pdf_one_pix(
 
         if list_edges_pix.size > 0:
             laplacian_ = compute_laplacian_local(
-                Theta, n, list_edges_pix, list_pixel_candidates[i]
+                Var, n, list_edges_pix, list_pixel_candidates[i]
             )  # (k_mtm, D)
             neglog_p[i, :, :] += laplacian_**2  # (n_pix, k_mtm, D)
 
@@ -171,23 +176,24 @@ class L22LaplacianSpatialPrior(SpatialPrior):
 
     def neglog_pdf(
         self,
-        Theta: np.ndarray,
+        Var: xp.ndarray,
+        idx_pix: Optional[xp.ndarray] = None,
         with_weights: bool = True,
         pixelwise: bool = False,
-    ) -> np.ndarray:
-        assert Theta.shape == (self.N, self.D)
+    ) -> xp.ndarray:
+        assert Var.shape == (self.N, self.D)
 
         if pixelwise:
-            neglog_p = np.zeros((self.N, self.D))
+            neglog_p = xp.zeros((self.N, self.D))
         else:
-            neglog_p = np.zeros((self.D,))
+            neglog_p = xp.zeros((self.D,))
 
         if self.list_edges.size > 0:
-            laplacian_ = compute_laplacian(Theta, self.list_edges)
+            laplacian_ = compute_laplacian(Var, self.list_edges)
             if pixelwise:
                 neglog_p += laplacian_**2  # (N,D)
             else:
-                neglog_p += np.sum(laplacian_**2, axis=0)  # (D,)
+                neglog_p += xp.sum(laplacian_**2, axis=0)  # (D,)
 
         if with_weights:
             if pixelwise:
@@ -200,61 +206,61 @@ class L22LaplacianSpatialPrior(SpatialPrior):
 
     def neglog_pdf_one_pix(
         self,
-        Theta: np.ndarray,
-        idx_pix: np.ndarray,
-        list_pixel_candidates: np.ndarray,
-        other_weights: Optional[np.ndarray] = None,
-    ) -> np.ndarray:
+        Var: xp.ndarray,
+        idx_pix: xp.ndarray,
+        list_pixel_candidates: xp.ndarray,
+        other_weights: Optional[xp.ndarray] = None,
+    ) -> xp.ndarray:
         """
         computes the neg log-prior when only one pixel is modified
 
         Parameters
         ----------
-        Theta : np.ndarray of shape (N, D)
+        Var : xp.ndarray of shape (N, D)
             current iterate
 
-        idx_pix : np.ndarray
+        idx_pix : xp.ndarray
             array of the indices of the pixels to consider (:math:`0 \leq n \leq N - 1`)
 
-        list_pixel_candidates : np.ndarray of shape (N_candidates, D)
+        list_pixel_candidates : xp.ndarray of shape (N_candidates, D)
             the list of all candidates for pixel n
 
         Returns
         -------
-        np.ndarray of shape (N_candidates,)
+        xp.ndarray of shape (N_candidates,)
             the neg log-prior of the candidates
         """
         neglog_p = _neglog_pdf_one_pix(
-            Theta, idx_pix, list_pixel_candidates, self.list_edges
+            Var, idx_pix, list_pixel_candidates, self.list_edges
         )  # # (n_pix, k_mtm, D)
         # neglog_p /= self.N * self.D
 
         if other_weights is None:
-            return np.sum(
+            return xp.sum(
                 neglog_p * self.weights[None, None, :], axis=2
             )  # (n_pix, k_mtm)
         else:
-            return np.sum(
+            return xp.sum(
                 neglog_p * other_weights[None, None, :], axis=2
             )  # (n_pix, k_mtm)
 
-    def gradient_neglog_pdf(self, Theta: np.ndarray) -> np.ndarray:
-        assert Theta.shape == (self.N, self.D)
+    def gradient_neglog_pdf(self, Var: xp.ndarray) -> xp.ndarray:
+        assert Var.shape == (self.N, self.D)
 
-        laplacian_ = compute_laplacian(Theta, self.list_edges)
+        laplacian_ = compute_laplacian(Var, self.list_edges)
 
         g = compute_gradient_from_laplacian(laplacian_, self.list_edges)  # (N, D)
         # g /= self.N * self.D
         return self.weights[None, :] * g  # (N, D)
 
-    def hess_diag_neglog_pdf(self, Theta: np.ndarray) -> np.ndarray:
-        hess_diag = np.zeros_like(Theta, dtype=np.float64)
+    def hess_diag_neglog_pdf(self, Var: xp.ndarray) -> xp.ndarray:
+        hess_diag = xp.zeros_like(Var, dtype=xp.float64)
 
         if self.list_edges.size > 0:
-            idx, counts = np.unique(self.list_edges.flatten(), return_counts=True)
+            idx, counts = xp.unique(self.list_edges.flatten(), return_counts=True)
             # print(counts.dtype, hess_diag.dtype)
             hess_diag[idx, :] += (
-                2 * (counts * (counts + 1))[:, None] * np.ones((idx.size, self.D))
+                2 * (counts * (counts + 1))[:, None] * xp.ones((idx.size, self.D))
             )
 
         # hess_diag /= self.N * self.D
@@ -263,7 +269,7 @@ class L22LaplacianSpatialPrior(SpatialPrior):
     def evaluate_all_nlpdf_utils(
         self, 
         current: dict[str, dict],
-        idx_pix: Optional[np.ndarray],
+        idx_pix: Optional[xp.ndarray],
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool,
         ) -> None:

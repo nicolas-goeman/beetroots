@@ -62,14 +62,14 @@ class GaussianLikelihood(Likelihood):
     def neglog_pdf(
         self,
         pixelwise: bool = False,
-        idx: Optional[np.ndarray] = None,
+        idx_pix: Optional[np.ndarray] = None,
     ) -> Union[float, np.ndarray]:
-        if idx is None:
+        if idx_pix is None:
             N_pix = self.N * 1
             y = self.y * 1
             sigma = self.sigma * 1
         else:
-            n_pix = idx.size
+            n_pix = idx_pix.size
             k_mtm = self.forward_map_evals["f_Var"].shape[0] // n_pix
             N_pix = self.forward_map_evals["f_Var"].shape[0]
 
@@ -164,7 +164,7 @@ class GaussianLikelihood(Likelihood):
     def evaluate_all_nlpdf_utils(
         self,
         current: dict[str, dict],
-        idx: Optional[np.ndarray],
+        idx_pix: Optional[np.ndarray],
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool,
     ) -> None:

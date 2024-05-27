@@ -111,21 +111,21 @@ class CensoredLogNormalLikelihood(Likelihood):
     def neglog_pdf(
         self,
         pixelwise: bool = False,
-        idx: Optional[np.ndarray] = None,
+        idx_pix: Optional[np.ndarray] = None,
     ) -> Union[float, np.ndarray]:
         r"""[summary]
 
         .. math::
             p(y_{n,\ell} \vert x) \propto \exp \left\{- [y_{n,\ell} = \omega] \Phi( \frac{\omega - f_{\ell}(x_n)}{\sigma^2} \right) - [y_{n,\ell} > \omega] \frac{\omega - f_{\ell}(x_n)}{\sigma^2} \right\}
         """
-        if idx is None:
+        if idx_pix is None:
             N_pix = self.N * 1
             logy = self.logy * 1
             sigma = self.sigma * 1
             log_omega = self.omega * 1
 
         else:
-            n_pix = idx.size
+            n_pix = idx_pix.size
             k_mtm = self.forward_map_evals["f_Var"].shape[0] // n_pix
             N_pix = self.forward_map_evals["f_Var"].shape[0]
 
@@ -134,13 +134,13 @@ class CensoredLogNormalLikelihood(Likelihood):
             log_omega = np.zeros((n_pix, k_mtm, self.L))
 
             for i_pix in range(n_pix):
-                logy[i_pix, :, :] = self.logy[idx[i_pix], :][None, :] * np.ones(
+                logy[i_pix, :, :] = self.logy[idx_pix[i_pix], :][None, :] * np.ones(
                     (k_mtm, self.L)
                 )
-                sigma[i_pix, :, :] = self.sigma[idx[i_pix], :][None, :] * np.ones(
+                sigma[i_pix, :, :] = self.sigma[idx_pix[i_pix], :][None, :] * np.ones(
                     (k_mtm, self.L)
                 )
-                log_omega[i_pix, :, :] = self.log_omega[idx[i_pix], :][
+                log_omega[i_pix, :, :] = self.log_omega[idx_pix[i_pix], :][
                     None, :
                 ] * np.ones((k_mtm, self.L))
 
@@ -311,7 +311,7 @@ class CensoredLogNormalLikelihood(Likelihood):
     def evaluate_all_nlpdf_utils(
         self,
         current: dict[str, dict],
-        idx: Optional[np.ndarray],
+        idx_pix: Optional[np.ndarray],
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool,
     ) -> None:

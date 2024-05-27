@@ -1,6 +1,11 @@
 """Defines the Total variation spatial regularization and its derivatives (for 1D signals only)
 """
-import numpy as np
+try:
+    import cupy as xp
+except:
+    import numpy as xp
+
+from typing import Optional
 import pandas as pd
 
 from beetroots.modelling.priors.abstract_spatial_prior import SpatialPrior
@@ -12,21 +17,25 @@ class TVeps1DSpatialPrior(SpatialPrior):
         D: int,
         N: int,
         df: pd.DataFrame,
-        weights: np.ndarray = None,
+        weights: xp.ndarray = None,
         eps: float = 1e-3,
     ):
         super().__init__(D, N, df, weights)
         self.eps = eps
 
-    def neglog_pdf(self, x: np.ndarray, with_weights: bool = True) -> np.ndarray:
-        assert x.shape == (self.N, self.D)
+    def neglog_pdf(
+            self,
+            Var: xp.ndarray,
+            idx_pix: Optional[xp.ndarray] = None,
+            with_weights: bool = True) -> xp.ndarray:
+        assert Var.shape == (self.N, self.D)
 
         if self.list_edges.size == 0:
-            return np.zeros((self.D,))
+            return xp.zeros((self.D,))
 
-        nlpdf = np.sum(
-            np.sqrt(
-                (x[self.list_edges[:, 1]] - x[self.list_edges[:, 0]]) ** 2 + self.eps
+        nlpdf = xp.sum(
+            xp.sqrt(
+                (Var[self.list_edges[:, 1]] - Var[self.list_edges[:, 0]]) ** 2 + self.eps
             ),
             axis=0,
         )
@@ -35,15 +44,15 @@ class TVeps1DSpatialPrior(SpatialPrior):
 
         return nlpdf  # (D,)
 
-    def gradient_neglog_pdf(self, x: np.ndarray) -> np.ndarray:
-        assert x.shape == (self.N, self.D)
-        grad_ = np.zeros_like(x, dtype=np.float64)
+    def gradient_neglog_pdf(self, Var: xp.ndarray) -> xp.ndarray:
+        assert Var.shape == (self.N, self.D)
+        grad_ = xp.zeros_like(Var, dtype=xp.float64)
         if self.list_edges.size == 0:
             return grad_
 
         for edge in self.list_edges:
-            val = (x[edge[1]] - x[edge[0]]) / np.sqrt(
-                (x[edge[1]] - x[edge[0]]) ** 2 + self.eps
+            val = (Var[edge[1]] - Var[edge[0]]) / xp.sqrt(
+                (Var[edge[1]] - Var[edge[0]]) ** 2 + self.eps
             )  # (D,)
             grad_[edge[0], :] -= val
             grad_[edge[1], :] += val
@@ -51,19 +60,19 @@ class TVeps1DSpatialPrior(SpatialPrior):
         grad_ = grad_ * self.weights[None, :]
         return grad_  # (N, D)
 
-    def hess_diag_neglog_pdf(self, x: np.ndarray) -> np.ndarray:
-        assert x.shape == (self.N, self.D)
+    def hess_diag_neglog_pdf(self, Var: xp.ndarray) -> xp.ndarray:
+        assert Var.shape == (self.N, self.D)
 
-        hess_diag = np.zeros_like(x, dtype=np.float64)
+        hess_diag = xp.zeros_like(Var, dtype=xp.float64)
 
         for edge in self.list_edges:
-            # val = 1 / np.sqrt((x[edge[1]] - x[edge[0]]) ** 2 + self.eps) - (
-            #     x[edge[1]] - x[edge[0]]
-            # ) ** 2 * ((x[edge[1]] - x[edge[0]]) ** 2 + self.eps) ** (
+            # val = 1 / xp.sqrt((Var[edge[1]] - Var[edge[0]]) ** 2 + self.eps) - (
+            #     Var[edge[1]] - Var[edge[0]]
+            # ) ** 2 * ((Var[edge[1]] - Var[edge[0]]) ** 2 + self.eps) ** (
             #     -3 / 2
             # )  # (D,)
-            delta_x = x[edge[1]] - x[edge[0]]
-            val = 2 * self.eps / (delta_x**2 + self.eps) ** (3 / 2)
+            delta_var = Var[edge[1]] - Var[edge[0]]
+            val = 2 * self.eps / (delta_var**2 + self.eps) ** (3 / 2)
             hess_diag[edge[0], :] += val
             hess_diag[edge[1], :] += val
 

@@ -107,17 +107,17 @@ class LogNormalLikelihood(Likelihood):
         self,
         pixelwise: bool = False,
         full: bool = False,
-        idx: Optional[np.ndarray] = None,
+        idx_pix: Optional[np.ndarray] = None,
     ) -> Union[float, np.ndarray]:
         # TODO: there are a few steps to be clarified in there
         # TODO: (what is the point of the reformatting step in here)
         # a priori, sam echange expected
-        if idx is None:
+        if idx_pix is None:
             N_pix = self.N * 1
             logy = self.logy * 1
             sigma = self.sigma * 1
         else:
-            n_pix = idx.size
+            n_pix = idx_pix.size
             k_mtm = self.forward_map_evals["f_Var"].shape[0] // n_pix
             N_pix = self.forward_map_evals["f_Var"].shape[0]
 
@@ -125,10 +125,10 @@ class LogNormalLikelihood(Likelihood):
             sigma = np.zeros((n_pix, k_mtm, self.L))
 
             for i_pix in range(n_pix):
-                logy[i_pix, :, :] = self.logy[idx[i_pix], :][None, :] * np.ones(
+                logy[i_pix, :, :] = self.logy[idx_pix[i_pix], :][None, :] * np.ones(
                     (k_mtm, self.L)
                 )
-                sigma[i_pix, :, :] = self.sigma[idx[i_pix], :][None, :] * np.ones(
+                sigma[i_pix, :, :] = self.sigma[idx_pix[i_pix], :][None, :] * np.ones(
                     (k_mtm, self.L)
                 )
 
@@ -203,7 +203,7 @@ class LogNormalLikelihood(Likelihood):
     def evaluate_all_nlpdf_utils(
         self,
         current: dict[str, dict],
-        idx: Optional[np.ndarray],
+        idx_pix: Optional[np.ndarray],
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool,
     ) -> None:

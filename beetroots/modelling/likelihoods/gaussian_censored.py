@@ -92,7 +92,7 @@ class CensoredGaussianLikelihood(Likelihood):
         self,
         pixelwise: bool = False,
         full: bool = False,
-        idx: Optional[np.ndarray] = None,
+        idx_pix: Optional[np.ndarray] = None,
     ) -> Union[float, np.ndarray]:
         r"""[summary]
 
@@ -302,7 +302,7 @@ class CensoredGaussianLikelihood(Likelihood):
     def evaluate_all_nlpdf_utils(
         self,
         current: dict[str, dict],
-        idx: Optional[np.ndarray],
+        idx_pix: Optional[np.ndarray],
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool,
     ) -> None:

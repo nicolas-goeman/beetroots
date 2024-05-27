@@ -1,6 +1,9 @@
 from typing import List, Union
 
-import numpy as np
+try:
+    import cupy as xp
+except:
+    import numpy as xp
 
 
 class SpatialPriorParams:
@@ -16,7 +19,7 @@ class SpatialPriorParams:
         self,
         name: str,
         use_next_nearest_neighbors: bool,
-        initial_regu_weights: Union[np.ndarray, List[float]],
+        initial_regu_weights: Union[xp.ndarray, List[float]],
     ) -> None:
         r"""
 
@@ -26,7 +29,7 @@ class SpatialPriorParams:
             name of the spatial regularization type, must be an element of ["L2-laplacian", "L2-gradient"]
         use_next_nearest_neighbors : bool
             wether or not to use the next nearest neighbors, i.e., in diagonal
-        initial_regu_weights : Union[np.ndarray, List[float]]
+        initial_regu_weights : Union[xp.ndarray, List[float]]
             initial regularization weights (the regularization weights can be tuned automatically during the Markov chain)
         """
         assert name in ["L2-laplacian", "L2-gradient"]
@@ -38,4 +41,4 @@ class SpatialPriorParams:
         r"""bool: wether or not to use the next nearest neighbors, i.e., in diagonal"""
 
         self.initial_regu_weights = initial_regu_weights
-        r"""Union[np.ndarray, List[float]: initial regularization weights (the regularization weights can be tuned automatically during the Markov chain)"""
+        r"""Union[xp.ndarray, List[float]: initial regularization weights (the regularization weights can be tuned automatically during the Markov chain)"""

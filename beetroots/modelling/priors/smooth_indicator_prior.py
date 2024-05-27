@@ -1,29 +1,34 @@
-from typing import List
+from typing import List, Optional
 
-import numba
-import numpy as np
+import numba as nb
+try:
+    import cupy as xp
+    decorator_nb = nb.cuda.jit
+except:
+    import numpy as xp
+    decorator_nb = nb.njit
 
 from beetroots.modelling.priors.abstract_prior import PriorProbaDistribution
 
 
-@numba.jit("float64[:](float64[:,:], float64[:], float64[:], float64)", nopython=True)
+@decorator_nb("float64[:](float64[:,:], float64[:], float64[:], float64)", nopython=True)
 def penalty(
-    Theta: np.ndarray,
-    lower_bounds: np.ndarray,
-    upper_bounds: np.ndarray,
+    Var: xp.ndarray,
+    lower_bounds: xp.ndarray,
+    upper_bounds: xp.ndarray,
     indicator_margin_scale: float,
-) -> np.ndarray:
+) -> xp.ndarray:
     D = lower_bounds.size
 
-    neglog_p = np.zeros((D,))
+    neglog_p = xp.zeros((D,))
     for d in range(D):
-        neglog_p[d] = np.sum(
-            np.where(
-                Theta[:, d] > upper_bounds[d],
-                (Theta[:, d] - upper_bounds[d]) / indicator_margin_scale,
-                np.where(
-                    Theta[:, d] < lower_bounds[d],
-                    (lower_bounds[d] - Theta[:, d]) / indicator_margin_scale,
+        neglog_p[d] = xp.sum(
+            xp.where(
+                Var[:, d] > upper_bounds[d],
+                (Var[:, d] - upper_bounds[d]) / indicator_margin_scale,
+                xp.where(
+                    Var[:, d] < lower_bounds[d],
+                    (lower_bounds[d] - Var[:, d]) / indicator_margin_scale,
                     0,
                 ),
             )
@@ -34,46 +39,46 @@ def penalty(
 
 @numba.njit()
 def penalty_one_pix(
-    Theta: np.ndarray,
-    lower_bounds: np.ndarray,
-    upper_bounds: np.ndarray,
+    Var: xp.ndarray,
+    lower_bounds: xp.ndarray,
+    upper_bounds: xp.ndarray,
     indicator_margin_scale: float,
-) -> np.ndarray:
+) -> xp.ndarray:
     neglog_p_full = (
-        np.where(
-            Theta > np.expand_dims(upper_bounds, 0),
-            (Theta - np.expand_dims(upper_bounds, 0)) / indicator_margin_scale,
-            np.where(
-                Theta < np.expand_dims(lower_bounds, 0),
-                (np.expand_dims(lower_bounds, 0) - Theta) / indicator_margin_scale,
-                np.zeros_like(Theta),
+        xp.where(
+            Var > xp.expand_dims(upper_bounds, 0),
+            (Var - xp.expand_dims(upper_bounds, 0)) / indicator_margin_scale,
+            xp.where(
+                Var < xp.expand_dims(lower_bounds, 0),
+                (xp.expand_dims(lower_bounds, 0) - Var) / indicator_margin_scale,
+                xp.zeros_like(Var),
             ),
         )
         ** 4
     )  # (N_candidates, D)
-    return np.sum(neglog_p_full, axis=1)  # (N_candidates,)
+    return xp.sum(neglog_p_full, axis=1)  # (N_candidates,)
 
 
-@numba.jit("float64[:,:](float64[:,:], float64[:], float64[:], float64)", nopython=True)
+@decorator_nb("float64[:,:](float64[:,:], float64[:], float64[:], float64)", nopython=True)
 def gradient_penalty(
-    Theta: np.ndarray,
-    lower_bounds: np.ndarray,
-    upper_bounds: np.ndarray,
+    Var: xp.ndarray,
+    lower_bounds: xp.ndarray,
+    upper_bounds: xp.ndarray,
     indicator_margin_scale: float,
-) -> np.ndarray:
+) -> xp.ndarray:
     D = lower_bounds.size
 
-    g = np.zeros_like(Theta)
+    g = xp.zeros_like(Var)
     for d in range(D):
         g[:, d] = (
             4
             / indicator_margin_scale**4
-            * np.where(
-                Theta[:, d] > upper_bounds[d],
-                (Theta[:, d] - upper_bounds[d]),
-                np.where(
-                    Theta[:, d] < lower_bounds[d],
-                    (-lower_bounds[d] + Theta[:, d]),
+            * xp.where(
+                Var[:, d] > upper_bounds[d],
+                (Var[:, d] - upper_bounds[d]),
+                xp.where(
+                    Var[:, d] < lower_bounds[d],
+                    (-lower_bounds[d] + Var[:, d]),
                     0,
                 ),
             )
@@ -82,26 +87,26 @@ def gradient_penalty(
     return g
 
 
-@numba.jit("float64[:,:](float64[:,:], float64[:], float64[:], float64)", nopython=True)
+@decorator_nb("float64[:,:](float64[:,:], float64[:], float64[:], float64)", nopython=True)
 def hess_diag_penalty(
-    Theta: np.ndarray,
-    lower_bounds: np.ndarray,
-    upper_bounds: np.ndarray,
+    Var: xp.ndarray,
+    lower_bounds: xp.ndarray,
+    upper_bounds: xp.ndarray,
     indicator_margin_scale: float,
-) -> np.ndarray:
+) -> xp.ndarray:
     D = lower_bounds.size
 
-    hess_diag = np.zeros_like(Theta)
+    hess_diag = xp.zeros_like(Var)
     for d in range(D):
         hess_diag[:, d] = (
             12
             / indicator_margin_scale**4
-            * np.where(
-                Theta[:, d] > upper_bounds[d],
-                (Theta[:, d] - upper_bounds[d]),
-                np.where(
-                    Theta[:, d] < lower_bounds[d],
-                    (-lower_bounds[d] + Theta[:, d]),
+            * xp.where(
+                Var[:, d] > upper_bounds[d],
+                (Var[:, d] - upper_bounds[d]),
+                xp.where(
+                    Var[:, d] < lower_bounds[d],
+                    (-lower_bounds[d] + Var[:, d]),
                     0,
                 ),
             )
@@ -138,8 +143,8 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
         D: int,
         N: int,
         indicator_margin_scale: float,
-        lower_bounds: np.ndarray,
-        upper_bounds: np.ndarray,
+        lower_bounds: xp.ndarray,
+        upper_bounds: xp.ndarray,
         list_idx_sampling: List[int],
     ) -> None:
         super().__init__(D, N)
@@ -147,14 +152,14 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
         r"""float: scaling parameter :math:`\Delta`"""
 
         self.lower_bounds_full = lower_bounds
-        r"""np.ndarray: validity interval lower bounds of the full set of D physical parameters"""
+        r"""xp.ndarray: validity interval lower bounds of the full set of D physical parameters"""
         self.upper_bounds_full = upper_bounds
-        r"""np.ndarray: validity interval upper bounds of the full set of D physical parameters"""
+        r"""xp.ndarray: validity interval upper bounds of the full set of D physical parameters"""
 
         self.lower_bounds = lower_bounds[list_idx_sampling]
-        r"""np.ndarray: validity interval lower bounds of the set of sampled physical parameters"""
+        r"""xp.ndarray: validity interval lower bounds of the set of sampled physical parameters"""
         self.upper_bounds = upper_bounds[list_idx_sampling]
-        r"""np.ndarray: validity interval upper bounds of the set of sampled physical parameters"""
+        r"""xp.ndarray: validity interval upper bounds of the set of sampled physical parameters"""
 
         assert (
             self.lower_bounds.size == self.D
@@ -165,7 +170,11 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
 
         return
 
-    def neglog_pdf(self, Theta: np.ndarray, pixelwise: bool = False) -> np.ndarray:
+    def neglog_pdf(
+            self,
+            Var: xp.ndarray,
+            idx_pix: Optional[xp.ndarray] = None,
+            pixelwise: bool = False) -> xp.ndarray:
         r"""compute the negative log of the prior that approximates the indicator function
 
         .. math::
@@ -178,34 +187,34 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
 
         Parameters
         ----------
-        Theta : np.array of shape (N, D)
+        Var : xp.array of shape (N, D)
             current iterate
         pixelwise : bool, optional
             wether to return an aggregated result per pixel (if True) or per map (if False), by default False
 
         Returns
         -------
-        neglog_p : np.ndarray of shape (D,) or (N,)
+        neglog_p : xp.ndarray of shape (D,) or (N,)
             negative log of the smooth indicator prior pdf
         """
-        assert len(Theta.shape) == 2 and Theta.shape[1] == self.D
+        assert len(Var.shape) == 2 and Var.shape[1] == self.D
         if pixelwise:
             neglog_p = penalty_one_pix(
-                Theta,
+                Var,
                 self.lower_bounds,
                 self.upper_bounds,
                 self.indicator_margin_scale,
             )  # (N,)
         else:
             neglog_p = penalty(
-                Theta,
+                Var,
                 self.lower_bounds,
                 self.upper_bounds,
                 self.indicator_margin_scale,
             )  # (D,)
         return neglog_p
 
-    def neglog_pdf_one_pix(self, Theta: np.ndarray) -> np.ndarray:
+    def neglog_pdf_one_pix(self, Var: xp.ndarray) -> xp.ndarray:
         r"""compute the negative log of the prior that approximates the indicator function
 
         .. math::
@@ -218,7 +227,7 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
 
         Parameters
         ----------
-        Theta : np.array of shape (N_candidates, D)
+        Var : xp.array of shape (N_candidates, D)
             current iterate
 
         Returns
@@ -226,53 +235,53 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
         neglog_p : numpy array of shape (N_candidates,)
             negative log of the smooth indicator prior per map
         """
-        assert len(Theta.shape) == 2 and Theta.shape[1] == self.D
+        assert len(Var.shape) == 2 and Var.shape[1] == self.D
         neglog_p = penalty_one_pix(
-            Theta,
+            Var,
             self.lower_bounds,
             self.upper_bounds,
             self.indicator_margin_scale,
         )  # (N_candidates,)
         return neglog_p
 
-    def gradient_neglog_pdf(self, Theta: np.ndarray) -> np.ndarray:
+    def gradient_neglog_pdf(self, Var: xp.ndarray) -> xp.ndarray:
         r"""gradient of the negative log pdf of the smooth indicator prior
 
         Parameters
         ----------
-        Theta : np.array of shape (N, D)
+        Var : xp.array of shape (N, D)
             current iterate
 
         Returns
         -------
-        g : np.array of shape (N, D)
+        g : xp.array of shape (N, D)
             gradient
         """
-        assert len(Theta.shape) == 2 and Theta.shape[1] == self.D
+        assert len(Var.shape) == 2 and Var.shape[1] == self.D
         grad_ = gradient_penalty(
-            Theta,
+            Var,
             self.lower_bounds,
             self.upper_bounds,
             self.indicator_margin_scale,
         )  # (N, D)
         return grad_  # / (self.N * self.D)
 
-    def hess_diag_neglog_pdf(self, Theta: np.ndarray) -> np.ndarray:
+    def hess_diag_neglog_pdf(self, Var: xp.ndarray) -> xp.ndarray:
         r"""diagonal of the Hessian of the negative log pdf of the smooth indicator prior
 
         Parameters
         ----------
-        Theta : np.array of shape (N, D)
+        Var : xp.array of shape (N, D)
             current iterate
 
         Returns
         -------
-        hess_diag : np.array of shape (N, D)
+        hess_diag : xp.array of shape (N, D)
             [description]
         """
-        assert len(Theta.shape) == 2 and Theta.shape[1] == self.D
+        assert len(Var.shape) == 2 and Var.shape[1] == self.D
         hess_diag = hess_diag_penalty(
-            Theta,
+            Var,
             self.lower_bounds,
             self.upper_bounds,
             self.indicator_margin_scale,

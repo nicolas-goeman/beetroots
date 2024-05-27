@@ -3,7 +3,10 @@ from typing import Union, Optional
 
 from beetroots.modelling.component_distribution import ComponentDistribution
 
-import numpy as np
+try:
+    import cupy as xp
+except:
+    import numpy as xp
 
 
 class PriorProbaDistribution(ComponentDistribution):
@@ -16,22 +19,26 @@ class PriorProbaDistribution(ComponentDistribution):
         """int: number of pixels in each physical dimension"""
 
     @abstractmethod
-    def neglog_pdf(self, var: np.ndarray) -> Union[float, np.ndarray]:
+    def neglog_pdf(
+        self,
+        Var: xp.ndarray,
+        idx_pix: Optional[xp.ndarray] = None,
+        ) -> Union[float, xp.ndarray]:
         raise NotImplementedError
 
     @abstractmethod
-    def gradient_neglog_pdf(self, var: np.ndarray) -> np.ndarray:
+    def gradient_neglog_pdf(self, var: xp.ndarray) -> xp.ndarray:
         raise NotImplementedError
 
     @abstractmethod
-    def hess_diag_neglog_pdf(self, var: np.ndarray) -> np.ndarray:
+    def hess_diag_neglog_pdf(self, var: xp.ndarray) -> xp.ndarray:
         raise NotImplementedError
 
     @abstractmethod
     def evaluate_all_nlpdf_utils(
         self, 
         current: dict[str, dict],
-        idx: Optional[np.ndarray],
+        idx_pix: Optional[xp.ndarray],
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool,
         ) -> None:

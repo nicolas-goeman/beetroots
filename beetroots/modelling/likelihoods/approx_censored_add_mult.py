@@ -481,7 +481,7 @@ class MixingModelsLikelihood(Likelihood):
         nll_utils: dict,
         pixelwise: bool = False,
         full: bool = False,
-        idx: Optional[np.ndarray] = None,
+        idx_pix: Optional[np.ndarray] = None,
     ) -> Union[float, np.ndarray]:
 
         nlpdf = nll_utils["lambda_"] * np.where(
@@ -890,7 +890,7 @@ class MixingModelsLikelihood(Likelihood):
     def evaluate_all_nlpdf_utils(
         self,
         current: dict[str, dict],
-        idx: Optional[np.ndarray] = None,
+        idx_pix: Optional[np.ndarray] = None,
         compute_derivatives: bool = True,
         compute_derivatives_2nd_order: bool = True,
     ) -> None:
