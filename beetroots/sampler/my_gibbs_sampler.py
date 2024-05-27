@@ -598,6 +598,13 @@ class MyGibbsSampler(Sampler):
         accept_total = xp.zeros((new_var.shape[0],)) # (N, ) in general
         log_rg_total = xp.zeros((new_var.shape[0],)) # (N, ) in general
 
+        # * prepare dict with other required variables for weights computation (other variables won't change so we declare it outside)
+        names_vars_involved = target_distribution.var_names
+        current_candidates = {var_name: {} for var_name in names_vars_involved}
+        for var_name in names_vars_involved:
+            if var_name != key:
+                current_candidates[var_name] = {'var': xp.repeat(self.current[var_name]["var"][:, xp.newaxis, :], self.k_mtm + 1, axis=1)} # Add a dimension for the candidates.                
+
         # * define proba of changing each pixel
         # * either uniformly or depending on their respective nll
         # if posterior.prior_spatial is not None:
@@ -612,30 +619,23 @@ class MyGibbsSampler(Sampler):
             n_pix = idx_pix.size
 
             # * generate and evaluate candidates
-            candidates_pix = xp.zeros((n_pix, self.k_mtm + 1, *new_var.shape[1:]))
-            candidates_pix[:, :-1, ...] = self.generate_random_start_fct[key](
+            candidates = new_var * 1
+            candidates = candidates.reshape((new_var.shape[0], 1, *new_var.shape[1:])).repeat(self.k_mtm + 1, axis=1)  # (N, k_mtm, ...)
+            candidates[idx_pix, :-1, ...] = self.generate_random_start_fct[key](
                 new_var, idx_pix, self.generate_random_start_fct_kwargs[key]
             )
-            candidates_pix[:, -1, ...] = self.current[key]['var'][idx_pix, :] * 1
-            candidates_pix = candidates_pix.reshape(
+            candidates = candidates.reshape(
                 (n_pix * (self.k_mtm + 1), *new_var.shape[1:])
             )  # (n_pix * (k_mtm+1), *new_var.shape[1:]) (to use the likelihood nll method, reshaped back after)
 
             # --- COMPUTE WEIGHTS (USING LOG)
             # Compute neglogpdf of candidates
-            names_vars_involved = target_distribution.var_names
-            current_candidates = {var_name: None for var_name in names_vars_involved}
-            for var_name in names_vars_involved:
-                if var_name == key:
-                    current_candidates[var_name] = {'var': candidates_pix}
-                else:
-                    current_candidates[var_name] = {'var': xp.repeat(self.current[var_name]["var"][:, xp.newaxis, :], self.k_mtm + 1, axis=1)} # Add a dimension for the candidates.
+            current_candidates[key] = {'var': candidates}
             
             target_distribution.update_nlpdf_utils(current_candidates, idx_pix, compute_derivatives=False, compute_derivatives_2nd_order=False) # TODO: add the possibility to pass the idx_pix to the neglog_pdf method, improves the performance.
             current_candidates = target_distribution.neglog_pdf( # TODO: check if the shape corresponds to the expected one
                 current_candidates,
-                compute_derivatives = False,
-                compute_derivatives_2nd_order = False,
+                idx_pix,
             )  # (n_pix * (k_mtm+1),)
             assert neglogpdf_candidates.shape == (n_pix * (self.k_mtm + 1),)
 

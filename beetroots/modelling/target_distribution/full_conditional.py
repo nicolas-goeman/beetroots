@@ -49,6 +49,7 @@ class FullConditional(TargetDistribution):
         current: dict[str, Union[dict, float, xp.ndarray]],
         idx_pix: Optional[xp.ndarray] = None,
         pixelwise: bool = False,
+        update_nlpdf_utils: bool = True,
     ) -> float:
         pass
 

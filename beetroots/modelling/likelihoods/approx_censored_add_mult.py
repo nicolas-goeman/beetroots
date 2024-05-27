@@ -131,6 +131,7 @@ class MixingModelsLikelihood(Likelihood):
         omega: Union[float, np.ndarray],
         path_transition_params: str,
         list_lines_fit: List[str],
+        var_name: str,
     ) -> None:
         """Constructor of the GaussianLikelihood object.
 
@@ -158,7 +159,7 @@ class MixingModelsLikelihood(Likelihood):
         ValueError
             y must have the shape (N, L)
         """
-        super().__init__(forward_map, D, L, N, y)
+        super().__init__(forward_map, D, L, N, y, var_name)
 
         # ! trigger an error is the mean y contains less than N elements
         if not (y.shape == (N, L)):
@@ -478,23 +479,21 @@ class MixingModelsLikelihood(Likelihood):
 
     def neglog_pdf(
         self,
-        nll_utils: dict,
         pixelwise: bool = False,
         full: bool = False,
-        idx_pix: Optional[np.ndarray] = None,
     ) -> Union[float, np.ndarray]:
 
-        nlpdf = nll_utils["lambda_"] * np.where(
-            nll_utils["censored_mask"], nll_utils["nll_ac"], nll_utils["nll_au"]
-        ) + (1 - nll_utils["lambda_"]) * np.where(
-            nll_utils["censored_mask"], nll_utils["nll_mc"], nll_utils["nll_mu"]
+        nlpdf = self.nlpdf_utils["lambda_"] * np.where(
+            self.nlpdf_utils["censored_mask"], self.nlpdf_utils["nll_ac"], self.nlpdf_utils["nll_au"]
+        ) + (1 - self.nlpdf_utils["lambda_"]) * np.where(
+            self.nlpdf_utils["censored_mask"], self.nlpdf_utils["nll_mc"], self.nlpdf_utils["nll_mu"]
         )  # (N, L)
 
         nlpdf = np.nan_to_num(nlpdf)
-        nlpdf -= np.log(nll_utils["sigma_a"]) + np.log(nll_utils["sigma_m"])
+        nlpdf -= np.log(self.nlpdf_utils["sigma_a"]) + np.log(self.nlpdf_utils["sigma_m"])
         # nlpdf /= self.N * self.L
-        # nll_utils["censored_mask"].size = self.N * self.L if standard eval
-        # nll_utils["censored_mask"].size = N_candidates * self.L if candidates
+        # self.nlpdf_utils["censored_mask"].size = self.N * self.L if standard eval
+        # self.nlpdf_utils["censored_mask"].size = N_candidates * self.L if candidates
         if full:
             return nlpdf  # (N, L)
 
@@ -527,7 +526,7 @@ class MixingModelsLikelihood(Likelihood):
             s_a=self.nlpdf_utils["s_a"],
         )
         # add a constant to `nll_au` to ensure that it is positive
-        # nll_au -= np.log(nll_utils["sigma_a"])
+        # nll_au -= np.log(self.nlpdf_utils["sigma_a"])
         # nll_au = np.nan_to_num(nll_au)
         return nll_au
 
@@ -553,7 +552,7 @@ class MixingModelsLikelihood(Likelihood):
             m_m=self.nlpdf_utils["m_m"],
             s_m=self.nlpdf_utils["s_m"],
         )
-        # nll_mu -= np.log(nll_utils["sigma_m"])
+        # nll_mu -= np.log(self.nlpdf_utils["sigma_m"])
         return nll_mu
 
     def gradient_neglog_pdf(
@@ -895,7 +894,7 @@ class MixingModelsLikelihood(Likelihood):
         compute_derivatives_2nd_order: bool = True,
     ) -> None:
         
-        self.evaluate_all_forward_map() # TODO: put variable and other required arguments here
+        self.evaluate_all_forward_map(current[self.var_name]['var'], idx_pix, compute_derivatives=compute_derivatives, compute_derivatives_2nd_order=compute_derivatives_2nd_order) # TODO: put variable and other required arguments here
 
         assert (
             np.sum(np.isnan(self.forward_map_evals["log_f_Var"])) == 0
@@ -904,7 +903,7 @@ class MixingModelsLikelihood(Likelihood):
 
         self.nlpdf_utils = {}
         # * bias and variance
-        if idx is None:
+        if idx_pix is None:
             N_pix = self.N * 1
             sigma_a = self.sigma_a * 1
             sigma_m = self.sigma_m * 1
@@ -912,7 +911,7 @@ class MixingModelsLikelihood(Likelihood):
             log_y = self.log_y * 1
             omega = self.omega * 1
         else:
-            n_pix = idx.size
+            n_pix = idx_pix.size
             k_mtm = self.forward_map_evals["f_Var"].shape[0] // n_pix
             N_pix = self.forward_map_evals["f_Var"].shape[0]
             assert n_pix * k_mtm == N_pix
@@ -923,21 +922,21 @@ class MixingModelsLikelihood(Likelihood):
             omega = np.zeros((n_pix, k_mtm, self.L))
 
             for i_pix in range(n_pix):
-                sigma_a[i_pix, :, :] = self.sigma_a[idx[i_pix], :][None, :] * np.ones(
+                sigma_a[i_pix, :, :] = self.sigma_a[idx_pix[i_pix], :][None, :] * np.ones(
                     (k_mtm, self.L)
                 )
-                sigma_m[i_pix, :, :] = self.sigma_m[idx[i_pix], :][None, :] * np.ones(
+                sigma_m[i_pix, :, :] = self.sigma_m[idx_pix[i_pix], :][None, :] * np.ones(
                     (k_mtm, self.L)
                 )
-                y[i_pix, :, :] = self.y[idx[i_pix], :][None, :] * np.ones(
+                y[i_pix, :, :] = self.y[idx_pix[i_pix], :][None, :] * np.ones(
                     (k_mtm, self.L)
                 )
-                omega[i_pix, :, :] = self.omega[idx[i_pix], :][None, :] * np.ones(
+                omega[i_pix, :, :] = self.omega[idx_pix[i_pix], :][None, :] * np.ones(
                     (k_mtm, self.L)
                 )
 
             sigma_a = (
-                sigma_a.transpose((2, 0, 1)).reshape((self.L, N_pix)).T # FIXME: why a so complicated way to reshape? 
+                sigma_a.transpose((2, 0, 1)).reshape((self.L, N_pix)).T # FIXME: why a so complicated way to reshape? Partial answer: the reshape removes one dimension, putting the L in first dimension we ensure that the dimension L remains intact and is not the dimension chosen for ravelling.
             )  # .reshape((N_pix, self.L))
             sigma_m = (
                 sigma_m.transpose((2, 0, 1)).reshape((self.L, N_pix)).T
@@ -1111,7 +1110,7 @@ class MixingModelsLikelihood(Likelihood):
             # assert hess_diag_s_m.shape == (self.N, self.D, self.L)
 
         # * mixture weight
-        self.nlpdf_utils["lambda_"] = self.model_mixing_param(idx)
+        self.nlpdf_utils["lambda_"] = self.model_mixing_param(idx_pix)
 
         if compute_derivatives:
             self.nlpdf_utils["grad_lambda_"] = self.grad_model_mixing_param()

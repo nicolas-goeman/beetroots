@@ -3,7 +3,10 @@ from typing import Optional, Union
 
 from beetroots.modelling.component_distribution import ComponentDistribution
 
-import numpy as np
+try:
+    import cupy as xp
+except:
+    import numpy as xp
 
 
 class Likelihood(ComponentDistribution):
@@ -15,7 +18,8 @@ class Likelihood(ComponentDistribution):
         D: int,
         L: int,
         N: int,
-        y: np.ndarray,
+        y: xp.ndarray,
+        var_name: str,
     ) -> None:
         self.forward_map = forward_map
         self.forward_map_evals = {}
@@ -26,15 +30,17 @@ class Likelihood(ComponentDistribution):
         self.y = y
         self.hyperparameters = None
 
+        super().__init__(var_name)
+
         assert y.shape == (N, L)
 
-    def _update_observations(self, y: np.ndarray):
+    def _update_observations(self, y: xp.ndarray):
         r"""Update observations :math:`y` to be updated as :math:`y_{\text{new}}`  whenever the likelihood object :math:`p(y \mid f(\theta)` is interpreted as
         a prior on :math:`y` with hyperparameter :math:`\theta`.
 
         Parameters
         ----------
-        y : np.ndarray
+        y : xp.ndarray
             New state of the observations.
 
         Example
@@ -56,34 +62,34 @@ class Likelihood(ComponentDistribution):
         nll_utils: dict,
         pixelwise: bool = False,
         full: bool = False,
-        idx_pix: Optional[np.ndarray] = None,
-    ) -> Union[float, np.ndarray]:
+        idx_pix: Optional[xp.ndarray] = None,
+    ) -> Union[float, xp.ndarray]:
         raise NotImplementedError
 
     @abstractmethod
     def sample_observation_model(
-        self, forward_map_evals: dict, rng: Optional[np.random.Generator] # Used for model checking (maybe for something else)
-    ) -> np.ndarray:
+        self, forward_map_evals: dict, rng: Optional[xp.random.Generator] # Used for model checking (maybe for something else)
+    ) -> xp.ndarray:
         raise NotImplementedError
 
     @abstractmethod
     def gradient_neglog_pdf(
         self,
-        forward_map_evals: dict[str, np.ndarray],
-        nll_utils: dict[str, np.ndarray],
-    ) -> np.ndarray:
+        forward_map_evals: dict[str, xp.ndarray],
+        nll_utils: dict[str, xp.ndarray],
+    ) -> xp.ndarray:
         raise NotImplementedError
 
     def neglog_pdf_candidates(
         self,
-        candidates: np.ndarray,
-        idx: np.ndarray,
+        candidates: xp.ndarray,
+        idx: xp.ndarray,
         return_forward_map_evals: bool = False,
-    ) -> np.ndarray:
+    ) -> xp.ndarray:
         assert len(candidates.shape) == 2 and candidates.shape[1] == self.D
-        assert isinstance(idx, np.ndarray)
-        assert np.all(0 <= idx)
-        assert np.all(idx <= self.N - 1)
+        assert isinstance(idx, xp.ndarray)
+        assert xp.all(0 <= idx)
+        assert xp.all(idx <= self.N - 1)
 
         N_candidates = candidates.shape[0]
         n_pix = idx.size
@@ -104,7 +110,7 @@ class Likelihood(ComponentDistribution):
             pixelwise=True,
             idx=idx,
         )  # (N_candidates,)
-        assert isinstance(nll_candidates, np.ndarray)
+        assert isinstance(nll_candidates, xp.ndarray)
         assert nll_candidates.shape == (N_candidates,)
 
         if return_forward_map_evals:
@@ -116,18 +122,19 @@ class Likelihood(ComponentDistribution):
     @abstractmethod
     def hess_diag_neglog_pdf(
         self, forward_map_evals: dict, nll_utils: dict
-    ) -> np.ndarray:
+    ) -> xp.ndarray:
         raise NotImplementedError
 
     def evaluate_all_forward_map(
         self,
-        Var: np.ndarray,
+        Var: xp.ndarray,
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool,
-    ) -> dict[str, Union[float, np.ndarray]]:
+        idx_pix: Optional[xp.ndarray] = None,
+    ) -> dict[str, Union[float, xp.ndarray]]:
         assert len(Var.shape) == 2 and Var.shape[1] == self.D
         forward_map_evals = self.forward_map.compute_all(
-            Var, True, True, compute_derivatives, compute_derivatives_2nd_order
+            Var[idx_pix], True, True, compute_derivatives, compute_derivatives_2nd_order
         )
         self.forward_map_evals = forward_map_evals
 
@@ -135,7 +142,7 @@ class Likelihood(ComponentDistribution):
     def evaluate_all_nlpdf_utils(
         self,
         current: dict[str, dict],
-        idx_pix: Optional[np.ndarray],
+        idx_pix: Optional[xp.ndarray],
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool,
     ) -> None:
