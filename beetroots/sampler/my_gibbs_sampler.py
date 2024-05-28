@@ -55,10 +55,10 @@ class MyGibbsSampler(Sampler):
             random number generator (for reproducibility), by default xp.random.default_rng(42)
         """
 
-        self.generate_random_start_fct = my_gibbs_sampler_params.fct_generate_random_start
+        self.proposal_distribution_mtm = my_gibbs_sampler_params.proposal_distribution_mtm
         r"""dict[function]: function to generate random start values for the variables"""
 
-        self.generate_random_start_fct_kwargs = my_gibbs_sampler_params.fct_generate_random_start_kwargs
+        self.proposal_distribution_mtm_kwargs = my_gibbs_sampler_params.proposal_distribution_mtm_kwargs
         r"""dict[dict]: kwargs for the function to generate random start values for the variables"""
 
         # P-MALA params
@@ -408,6 +408,13 @@ class MyGibbsSampler(Sampler):
         accept_total = xp.zeros((new_var.shape[0],))
         log_proba_accept_total = xp.zeros((self.N,))
 
+        # * prepare dict with other required variables for weights computation (other variables won't change so we declare it outside)
+        names_vars_involved = target_distribution.var_names
+        current_candidate = {var_name: dict() for var_name in names_vars_involved}
+        for var_name in names_vars_involved:
+            if var_name != key:
+                current_candidate[var_name] = {'var': self.current[var_name]["var"]} # Add a dimension for the candidates.                
+
         # * define proba of changing each pixel
         # * either uniformly or depending on their respective nll
         # if posterior.prior_spatial is not None:
@@ -481,18 +488,22 @@ class MyGibbsSampler(Sampler):
             candidate_full = new_var * 1
             candidate_full[idx_pix, :] = mu_current * 1
 
-            candidate_all = target_distribution.compute_all( # TODO: not an efficient way to do so. compute_all computes the neglog_pdf for every pixel while only n_pix are needed. 
-                candidate_full,
-                compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
-            )
-            grad_cand = candidate_all["grad"][idx_pix, :] * 1
+            current_candidate[key] = {'var': candidate_full}
+            target_distribution.evaluate_all_nlpdf_utils(current_candidate, idx_pix, compute_derivatives=True, compute_derivatives_2nd_order=True)
+            candidate_all = {}
+            nlpdf = target_distribution.neglog_pdf(pixelwise=True, update_nlpdf_utils=False)
+            candidate_all['objective_pix'] = nlpdf.sum(axis=tuple(range(1, nlpdf.ndim))) # (n_pix,)
+            candidate_all['grad'] = target_distribution.grad_neglog_pdf(update_nlpdf_utils=False) # (N, D)
+            candidate_all['hess_diag'] = target_distribution.hess_diag_neglog_pdf(update_nlpdf_utils=False) # (N, D)
+
+            grad_cand = candidate_all["grad"] * 1
             v_cand = (
                 self.alpha * v_current + (1 - self.alpha) * grad_cand**2
             )  # (n_pix, D)
             diag_G_cand = 1 / (self.lambda_ + xp.sqrt(v_cand))  # (n_pix, D)
 
             if self.compute_correction_term:
-                hess_diag_cand = candidate_all["hess_diag"][idx_pix, :] * 1
+                hess_diag_cand = candidate_all["hess_diag"] * 1
 
                 correction_cand = -(
                     (1 - self.alpha)
@@ -521,7 +532,7 @@ class MyGibbsSampler(Sampler):
 
             # * compute proba accept
             logpdf_current = -self.current[key]["objective_pix"][idx_pix]
-            logpdf_candidate = -candidate_all["objective_pix"][idx_pix]
+            logpdf_candidate = -candidate_all["objective_pix"]
 
             shape_1 = logpdf_current.shape
             shape_2 = logpdf_candidate.shape
@@ -553,21 +564,21 @@ class MyGibbsSampler(Sampler):
             v[idx_pix, :] = v_cand * 1
             self.v = v.flatten()
 
-            j = self.j_t.reshape(new_var.shape) * 1
+            j = self.j_t[key].reshape(new_var.shape) * 1
             j[idx_pix, :] = xp.where(
                 accept_arr[:, None],
                 0.0,  # reset to 0 if accept
                 j[idx_pix, :] + 1,  # else add 1
             )
-            self.j_t = j.flatten()
+            self.j_t[key] = j.flatten()
 
+            if accept_arr.max() > 0:  # if at least one accept
+                self.current[key]['var'] = new_var * 1
 
-        # --- FINAL UPDATE: once all sites have been dealt with, update global parameters --- #
-        if accept_arr.max() > 0:  # if at least one accept
-            self.current[key] = target_distribution.compute_all(
-                new_var,
-                compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
-            )
+                self.current[key] = target_distribution.compute_all(
+                    self.current,
+                    compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
+                )
 
         # after loop
         return accept_total.mean(), log_proba_accept_total.mean()
@@ -600,7 +611,7 @@ class MyGibbsSampler(Sampler):
 
         # * prepare dict with other required variables for weights computation (other variables won't change so we declare it outside)
         names_vars_involved = target_distribution.var_names
-        current_candidates = {var_name: {} for var_name in names_vars_involved}
+        current_candidates = {var_name: dict() for var_name in names_vars_involved}
         for var_name in names_vars_involved:
             if var_name != key:
                 current_candidates[var_name] = {'var': xp.repeat(self.current[var_name]["var"][:, xp.newaxis, :], self.k_mtm + 1, axis=1)} # Add a dimension for the candidates.                
@@ -621,40 +632,27 @@ class MyGibbsSampler(Sampler):
             # * generate and evaluate candidates
             candidates = new_var * 1
             candidates = candidates.reshape((new_var.shape[0], 1, *new_var.shape[1:])).repeat(self.k_mtm + 1, axis=1)  # (N, k_mtm, ...)
-            candidates[idx_pix, :-1, ...] = self.generate_random_start_fct[key](
-                new_var, idx_pix, self.generate_random_start_fct_kwargs[key]
+            candidates[idx_pix, :-1, ...] = self.proposal_distribution_mtm[key].sample(
+                new_var, idx_pix, self.proposal_distribution_mtm_kwargs[key]
             )
-            candidates = candidates.reshape(
-                (n_pix * (self.k_mtm + 1), *new_var.shape[1:])
-            )  # (n_pix * (k_mtm+1), *new_var.shape[1:]) (to use the likelihood nll method, reshaped back after)
 
             # --- COMPUTE WEIGHTS (USING LOG)
             # Compute neglogpdf of candidates
             current_candidates[key] = {'var': candidates}
             
-            target_distribution.update_nlpdf_utils(current_candidates, idx_pix, compute_derivatives=False, compute_derivatives_2nd_order=False) # TODO: add the possibility to pass the idx_pix to the neglog_pdf method, improves the performance.
-            current_candidates = target_distribution.neglog_pdf( # TODO: check if the shape corresponds to the expected one
-                current_candidates,
-                idx_pix,
-            )  # (n_pix * (k_mtm+1),)
-            assert neglogpdf_candidates.shape == (n_pix * (self.k_mtm + 1),)
+            target_distribution.update_nlpdf_utils(current_candidates, idx_pix, compute_derivatives=False, compute_derivatives_2nd_order=False, mtm=True) # TODO: add the possibility to pass the idx_pix to the neglog_pdf method, improves the performance.
+            neglogpdf_candidates = target_distribution.neglog_pdf(pixelwise=True) # TODO: check if the shape corresponds to the expected one # We don't call the nlpdf_utils here but above since we want to add the mtm=True argument to the update_nlpdf_utils method.
+            assert neglogpdf_candidates.shape == (n_pix, self.k_mtm + 1,)
 
-            candidates_pix = candidates_pix.reshape((n_pix, self.k_mtm + 1, self.D))
+            # candidates_pix = candidates_pix.reshape((n_pix, self.k_mtm + 1, self.D))
             # assert xp.allclose(candidates_pix[:, -1, :], self.current["Theta"][idx_pix, :]) -> validated
 
-            neglogpdf_candidates = neglogpdf_candidates.reshape((n_pix, self.k_mtm + 1))
+            neglogpdf_proposal_candidates = self.proposal_distribution_mtm[key].neglog_pdf(candidates, idx_pix)
 
-            if posterior.prior_spatial is not None:
-                nlratio_prior_proposal = utils.compute_nlratio_prior_proposal(
-                    new_var * 1,
-                    posterior.prior_spatial.list_edges,
-                    posterior.prior_spatial.weights,
-                    idx_pix,
-                    candidates_pix,
-                )
-                shape_ = nlratio_prior_proposal.shape
-                assert shape_ == (n_pix, self.k_mtm + 1)
-                neglogpdf_candidates += nlratio_prior_proposal
+            shape_ = neglogpdf_proposal_candidates.shape
+            assert shape_ == (n_pix, self.k_mtm + 1)
+
+            neglogpdf_candidates -= neglogpdf_proposal_candidates # FIXME: originally it was a + instead of the minus but the proposal is in the demoninator in the weight ratio. Check if it is correct.
 
             neglogpdf_candidates_min = xp.amin(
                 neglogpdf_candidates, axis=1, keepdims=True
@@ -682,8 +680,8 @@ class MyGibbsSampler(Sampler):
                     p=weights[i],
                 )
 
-            challengers = candidates_pix[
-                xp.arange(n_pix), idx_challengers, :
+            challengers = candidates[ #FIXME: check if this is correct. I have chanegd it to match the fact that our candidates array cover all pixels not only the ones in idx_pix. Compare with the original code.
+                idx_pix, idx_challengers, :
             ]  # (n_pix, D)
             neglogpdf_challengers = neglogpdf_candidates[
                 xp.arange(n_pix), idx_challengers
@@ -716,39 +714,44 @@ class MyGibbsSampler(Sampler):
             accept_arr = log_u < log_rg
 
             new_var[idx_pix, :] = xp.where(
-                accept_arr[:, None] * xp.ones((n_pix, self.D)),
-                challengers,  # (n_pix, D)
-                candidates_pix[:, -1, :],  # (n_pix, D)
+                accept_arr[:, None] * xp.ones((n_pix, *new_var.shape[1:])),
+                challengers,  # (n_pix, *var_shape[1:])
+                candidates[idx_pix, -1, :],  # (n_pix, *var_shape[1:])
             )
 
             accept_total[idx_pix] = accept_arr * 1
             log_rg_total[idx_pix] = log_rg * 1
 
             # * re-initialize j for new point
-            new_j_t = self.j_t.reshape((self.N, self.D))
+            new_j_t = self.j_t[key].reshape(new_var.shape) * 1
             new_j_t[idx_pix, :] = xp.where(
                 accept_arr[:, None], 0.0, new_j_t[idx_pix, :]
             )
-            self.j_t = new_j_t.flatten()  # (ND,)
+            self.j_t[key] = new_j_t.flatten()
 
         # *------
         # * once all sites have been dealt with, update global parameters
         if accept_total.max() > 0:  # if at least one accept
-            self.current = posterior.compute_all(
-                new_var,
+            self.current[key]['var'] = new_var * 1
+
+            self.current[key] = target_distribution.compute_all(
+                self.current,
                 compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
             )
 
-            new_v = self.v.reshape((self.N, self.D))
+            new_v = self.v[key].reshape(new_var.shape) * 1
             new_v = xp.where(
                 accept_total[:, None],
-                self.alpha * new_v + (1 - self.alpha) * self.current["grad"] ** 2,
+                self.alpha * new_v + (1 - self.alpha) * self.current[key]["grad"] ** 2,
                 new_v,
             )
-            self.v = new_v.flatten()
-            assert xp.sum(xp.isnan(self.v)) == 0.0
-            assert xp.sum(xp.isinf(self.v)) == 0.0
+            self.v[key] = new_v.flatten()
+            assert xp.sum(xp.isnan(self.v[key])) == 0.0
+            assert xp.sum(xp.isinf(self.v[key])) == 0.0
         else:
-            pass #TODO: recompute compute_all for the original var
+            self.current[key] = target_distribution.compute_all(
+                self.current,
+                compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
+            )
 
         return xp.mean(accept_total), xp.mean(log_rg_total)
