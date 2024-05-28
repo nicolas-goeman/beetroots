@@ -130,11 +130,11 @@ class Likelihood(ComponentDistribution):
         Var: xp.ndarray,
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool,
-        idx_pix: Optional[xp.ndarray] = None,
     ) -> dict[str, Union[float, xp.ndarray]]:
         assert len(Var.shape) == 2 and Var.shape[1] == self.D
+
         forward_map_evals = self.forward_map.compute_all(
-            Var[idx_pix], True, True, compute_derivatives, compute_derivatives_2nd_order
+            Var, True, True, compute_derivatives, compute_derivatives_2nd_order
         )
         self.forward_map_evals = forward_map_evals
 

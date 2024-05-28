@@ -263,7 +263,8 @@ class MixingModelsLikelihood(Likelihood):
 
     def model_mixing_param(
         self,
-        idx: Optional[np.ndarray] = None,
+        idx_pix: Optional[np.ndarray] = None,
+        mtm: bool = False,
     ) -> np.ndarray:
         r"""computes the weight of the additive model :math:`\lambda_{n, \ell}` (line-wise and pixel-wise). In this model, :math:`\lambda_{n, \ell}` is a function of the observation :math:`y_{n, \ell}`, and therefore constant during the sampling
 
@@ -272,25 +273,25 @@ class MixingModelsLikelihood(Likelihood):
 
         with :math:`a` a transition location parameter and :math:`b` a transition speed parameter
         """
-        if idx is None:
-            N_pix = self.N * 1
-            log_fm1 = self.log_fm1 * 1
-            log_fp1 = self.log_fp1 * 1
+        if mtm is False:
+            N_pix = idx_pix.size
+            log_fm1 = self.log_fm1[idx_pix] * 1
+            log_fp1 = self.log_fp1[idx_pix] * 1
             # sigma_a = self.sigma_a * 1
             # sigma_m = self.sigma_m * 1
         else:
-            n_pix = idx.size
+            n_pix = idx_pix.size
             k_mtm = self.forward_map_evals["f_Var"].shape[0] // n_pix
             N_pix = self.forward_map_evals["f_Var"].shape[0]
 
             log_fm1 = np.zeros((n_pix, k_mtm, self.L))
             log_fp1 = np.zeros((n_pix, k_mtm, self.L))
 
-            for i_pix in range(n_pix):
-                log_fm1[i_pix, :, :] = self.log_fm1[idx[i_pix], :][None, :] * np.ones(
+            for i_pix in idx_pix:
+                log_fm1[i_pix, :, :] = self.log_fm1[i_pix, :][None, :] * np.ones(
                     (k_mtm, self.L)
                 )
-                log_fp1[i_pix, :, :] = self.log_fp1[idx[i_pix], :][None, :] * np.ones(
+                log_fp1[i_pix, :, :] = self.log_fp1[i_pix, :][None, :] * np.ones(
                     (k_mtm, self.L)
                 )
 
@@ -494,15 +495,19 @@ class MixingModelsLikelihood(Likelihood):
         # nlpdf /= self.N * self.L
         # self.nlpdf_utils["censored_mask"].size = self.N * self.L if standard eval
         # self.nlpdf_utils["censored_mask"].size = N_candidates * self.L if candidates
+
+        if self.nlpdf_utils['k_mtm'] > 0:
+                nlpdf = nlpdf.reshape((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.nlpdf_utils['L']))
+
         if full:
-            return nlpdf  # (N, L)
+            return nlpdf  # (n_pix, L) or (n_pix, k_mtm, L)
 
         if pixelwise:
-            sum_ = np.sum(nlpdf, axis=1)  # (N,)
+            sum_ = np.sum(nlpdf, axis=-1)  # (n_pix,) or (n_pix, k_mtm)
             assert sum_.size == self.forward_map_evals["f_Var"].shape[0]
             return sum_
 
-        return nlpdf.sum()
+        return nlpdf.sum() if self.nlpdf_utils['k_mtm'] == 0 else nlpdf.sum(axis=(0, -1))
 
     def neglog_pdf_ac(
         self,
@@ -513,6 +518,7 @@ class MixingModelsLikelihood(Likelihood):
 
         nll_ac = -log_ndtr(z)
         nll_ac = np.nan_to_num(nll_ac)
+
         return nll_ac
 
     def neglog_pdf_au(
@@ -590,7 +596,11 @@ class MixingModelsLikelihood(Likelihood):
         #     np.abs(grad_).max(axis=0)[None, :, :],
         # )  # (N, D, L)
         grad_ = np.nan_to_num(grad_)
-        return np.sum(grad_, axis=2)  # / (self.N * self.L)
+
+        if self.nlpdf_utils['k_mtm'] > 0:
+            grad_ = grad_.reshape((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.D, self.L))
+        
+        return np.sum(grad_, axis=-1)  # / (self.N * self.L)
 
     def gradient_neglog_pdf_ac(
         self,
@@ -702,7 +712,11 @@ class MixingModelsLikelihood(Likelihood):
         )  # (N, D, L)
 
         hess_diag = np.nan_to_num(hess_diag)
-        return np.sum(hess_diag, axis=2)  # / (self.N * self.L)
+
+        if self.nlpdf_utils['k_mtm'] > 0:
+            hess_diag = hess_diag.reshape((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.D, self.L))
+
+        return np.sum(hess_diag, axis=-1)  # / (self.N * self.L)
 
     def hess_diag_neglog_pdf_ac(
         self,
@@ -892,9 +906,18 @@ class MixingModelsLikelihood(Likelihood):
         idx_pix: Optional[np.ndarray] = None,
         compute_derivatives: bool = True,
         compute_derivatives_2nd_order: bool = True,
+        mtm: bool = False,
     ) -> None:
         
-        self.evaluate_all_forward_map(current[self.var_name]['var'], idx_pix, compute_derivatives=compute_derivatives, compute_derivatives_2nd_order=compute_derivatives_2nd_order) # TODO: put variable and other required arguments here
+        shape_var = current[self.var_name]['var'].shape
+        assert isinstance(mtm, bool), f"mtm should be a boolean, got {type(mtm)}"
+        
+        forward_var_inputs = current[self.var_name]['var']
+        if idx_pix is not None:
+            forward_var_inputs = forward_var_inputs[idx_pix]
+        if mtm:
+            forward_var_inputs = forward_var_inputs.reshape(-1, *shape_var[2:])
+        self.evaluate_all_forward_map(forward_var_inputs, compute_derivatives=compute_derivatives, compute_derivatives_2nd_order=compute_derivatives_2nd_order) # TODO: put variable and other required arguments here
 
         assert (
             np.sum(np.isnan(self.forward_map_evals["log_f_Var"])) == 0
@@ -902,26 +925,28 @@ class MixingModelsLikelihood(Likelihood):
 
 
         self.nlpdf_utils = {}
+
+        n_pix = idx_pix.size if idx_pix is not None else self.N *1
+        k_mtm = k_mtm = shape_var.shape[1] if mtm else 0
+        if n_pix == self.N:
+            idx_pix = np.arange(self.N)
+        N_pix = self.forward_map_evals["f_Var"].shape[0]
+        assert n_pix * k_mtm == N_pix
+
         # * bias and variance
-        if idx_pix is None:
-            N_pix = self.N * 1
+        if mtm is False:
             sigma_a = self.sigma_a * 1
             sigma_m = self.sigma_m * 1
             y = self.y * 1
             log_y = self.log_y * 1
             omega = self.omega * 1
         else:
-            n_pix = idx_pix.size
-            k_mtm = self.forward_map_evals["f_Var"].shape[0] // n_pix
-            N_pix = self.forward_map_evals["f_Var"].shape[0]
-            assert n_pix * k_mtm == N_pix
-
             sigma_a = np.zeros((n_pix, k_mtm, self.L))
             sigma_m = np.zeros((n_pix, k_mtm, self.L))
             y = np.zeros((n_pix, k_mtm, self.L)) # NOTE: y is reshaped in order to match the new dimension that comes with the MTM kernel. Nevertheless, self.y is never modified.
             omega = np.zeros((n_pix, k_mtm, self.L))
-
-            for i_pix in range(n_pix):
+            
+            for i_pix in idx_pix:
                 sigma_a[i_pix, :, :] = self.sigma_a[idx_pix[i_pix], :][None, :] * np.ones(
                     (k_mtm, self.L)
                 )
@@ -948,6 +973,11 @@ class MixingModelsLikelihood(Likelihood):
             omega = (
                 omega.transpose((2, 0, 1)).reshape((self.L, N_pix)).T
             )  # .reshape((N_pix, self.L))            omega
+        
+
+        self.nlpdf_utils['n_pix'] = n_pix
+        self.nlpdf_utils['N_pix'] = N_pix
+        self.nlpdf_utils['k_mtm'] = k_mtm
 
         # * -----
         self.nlpdf_utils["censored_mask"] = (y <= omega) * 1
@@ -1110,7 +1140,7 @@ class MixingModelsLikelihood(Likelihood):
             # assert hess_diag_s_m.shape == (self.N, self.D, self.L)
 
         # * mixture weight
-        self.nlpdf_utils["lambda_"] = self.model_mixing_param(idx_pix)
+        self.nlpdf_utils["lambda_"] = self.model_mixing_param(idx_pix, mtm)
 
         if compute_derivatives:
             self.nlpdf_utils["grad_lambda_"] = self.grad_model_mixing_param()

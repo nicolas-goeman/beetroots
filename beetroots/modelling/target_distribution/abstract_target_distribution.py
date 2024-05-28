@@ -134,8 +134,9 @@ class TargetDistribution(ABC):
         idx_pix: Optional[xp.ndarray] = None,
         compute_derivatives: bool = True,
         compute_derivatives_2nd_order: bool = True,
+        mtm: bool = False,
         **kwargs,
     ) -> None:
         for cd in self.distribution_components.values():
-            cd.evaluate_all_nlpdf_utils(current, idx_pix, compute_derivatives, compute_derivatives_2nd_order, **kwargs)
+            cd.evaluate_all_nlpdf_utils(current, idx_pix, compute_derivatives, compute_derivatives_2nd_order, mtm, **kwargs)
 
