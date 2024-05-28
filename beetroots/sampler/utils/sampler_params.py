@@ -8,7 +8,7 @@ except:
     import numpy as xp
 
 import pandas as pd
-from beetroots.sampler.utils import mtm_random_start
+from beetroots.sampler.proposal_mtm import mixture_neighbors_indicator
 
 
 class MySamplerParams(object):
@@ -98,8 +98,8 @@ class MyGibbsSamplerParams(object):
         history_weight: dict[float],
         selection_probas: Union[dict[xp.ndarray], dict[List[float]]],
         k_mtm: dict[int],
-        generate_function: dict[str],
-        generate_function_kwargs = dict[dict],
+        proposal_dsitribution_mtm: dict[str],
+        proposal_dsitribution_mtm_kwargs = dict[dict],
         is_stochastic: bool = True,
         compute_correction_term: bool = True,
     ) -> None:
@@ -162,5 +162,5 @@ class MyGibbsSamplerParams(object):
         self.is_stochastic = is_stochastic
         self.compute_correction_term = compute_correction_term
 
-        self.fct_generate_random_start = {key: getattr(mtm_random_start, val) for key, val in generate_function.items()} 
-        self.fct_generate_random_start_kwargs = {key: kwargs for key, kwargs in generate_function_kwargs.items()}
+        self.proposal_dsitribution_mtm = {key: getattr(mixture_neighbors_indicator, val) for key, val in proposal_dsitribution_mtm.items()} 
+        self.proposal_dsitribution_mtm_kwargs = {key: kwargs for key, kwargs in proposal_dsitribution_mtm_kwargs.items()}
