@@ -54,16 +54,17 @@ class TargetDistribution(ABC):
     @abstractmethod
     def neglog_pdf(
         self,
-        current: dict[str, Union[dict, float, xp.ndarray]],
+        current: dict[str, Union[dict, float, xp.ndarray]]=None,
         idx_pix: Optional[xp.ndarray] = None,
         pixelwise: bool = False,
+        update_nlpdf_utils: bool = True,
     ) -> float:
-        pass
+        pass # NOTE: when calling update_nlpdf_utils (when it is true), it should (in general) deactivate the the computation of the utils for the derivatives to avoid unecessary computations.
 
     @abstractmethod
     def grad_neglog_pdf(
         self,
-        current: dict[dict[str, xp.ndarray]],
+        current: dict[dict[str, xp.ndarray]]=None,
         idx_pix: Optional[xp.ndarray] = None,
         update_nlpdf_utils: bool = True,
     ) -> xp.ndarray:
@@ -108,6 +109,7 @@ class TargetDistribution(ABC):
         current_sampler: dict,
         compute_derivatives: bool = True,
         compute_derivatives_2nd_order: bool = True,
+        update_nlpdf_utils: bool = True,
         **kwargs,
     ) -> dict:
         r"""compute negative log pdf and derivatives of the target distribution
@@ -137,6 +139,21 @@ class TargetDistribution(ABC):
         mtm: bool = False,
         **kwargs,
     ) -> None:
+        """Update all utilities for the negative log-pdf and its eventual derivatives
+
+        Parameters
+        ----------
+        current : dict[str, dict]
+            current iterate
+        idx_pix : np.ndarray, optional
+            indices of the pixels, by default None
+        compute_derivatives : bool, optional
+            whether to compute 1st order derivatives, by default True
+        compute_derivatives_2nd_order : bool, optional
+            whether to compute 2nd order derivatives, by default True
+        mtm : bool, optional    
+            whether to use the MTM, by default False
+        """
         for cd in self.distribution_components.values():
             cd.evaluate_all_nlpdf_utils(current, idx_pix, compute_derivatives, compute_derivatives_2nd_order, mtm, **kwargs)
 

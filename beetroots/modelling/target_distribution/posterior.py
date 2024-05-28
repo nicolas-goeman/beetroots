@@ -89,7 +89,7 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
 
     def neglog_pdf(
         self,
-        current: dict[str, Union[dict, float, xp.ndarray]],
+        current: dict[str, Union[dict, float, xp.ndarray]]=None,
         idx_pix: Optional[xp.ndarray] = None,
         pixelwise: bool = False,
         update_nlpdf_utils: bool = True,
@@ -114,7 +114,7 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
 
     def grad_neglog_pdf(
         self,
-        current: dict[dict[str, xp.ndarray]],
+        current: dict[dict[str, xp.ndarray]]=None,
         idx_pix: Optional[xp.ndarray] = None,
         update_nlpdf_utils: bool = True,
     ) -> xp.ndarray:

@@ -169,6 +169,8 @@ class L22LaplacianSpatialPrior(SpatialPrior):
         idx_pix: Optional[xp.ndarray],
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool,
+        mtm: bool = False,
+        **kwargs
         ) -> None:
         """Evaluate all utilities for the negative log-pdf and its eventual derivatives"""
 
@@ -177,7 +179,7 @@ class L22LaplacianSpatialPrior(SpatialPrior):
         assert Var.shape[0] == self.N
         assert Var.shape[-1]==self.D
 
-        self.nlpdf_utils['k_mtm'] = Var.shape[1] if len(Var.shape) == 3 else 0
+        self.nlpdf_utils['k_mtm'] = Var.shape[1] if mtm else 0
         self.nlpdf_utils['n_pix'] = idx_pix.size if idx_pix is not None else self.N
 
         self.nlpdf_utils['laplacian_local'] = compute_laplacian_local(Var, idx_pix, self.list_edges, self.nlpdf_utils['k_mtm'])

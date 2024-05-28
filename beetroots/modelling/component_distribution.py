@@ -12,8 +12,11 @@ class ComponentDistribution(ABC):
 
     def __init__(
         self,
+        var_name: str,
     ) -> None:
         self.nlpdf_utils = {}
+
+        self.var_name = var_name
 
     @abstractmethod
     def neglog_pdf(

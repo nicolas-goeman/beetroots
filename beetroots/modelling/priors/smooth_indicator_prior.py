@@ -37,7 +37,7 @@ def penalty(
     return neglog_p  # (D,)
 
 
-@numba.njit()
+@decorator_nb()
 def penalty_one_pix(
     Var: xp.ndarray,
     lower_bounds: xp.ndarray,
