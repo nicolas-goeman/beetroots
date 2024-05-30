@@ -11,9 +11,7 @@ except ImportError:
 from scipy.special import softmax
 from tqdm.auto import tqdm
 
-from beetroots.modelling.likelihoods.abstract_likelihood import Likelihood
 from beetroots.modelling.target_distribution.abstract_target_distribution import TargetDistribution
-from beetroots.modelling.target_distribution.posterior import Posterior
 from beetroots.sampler.abstract_sampler import Sampler
 from beetroots.sampler.saver.hierarchical_saver import HierarchicalSaver
 from beetroots.sampler.utils import utils
@@ -409,7 +407,7 @@ class MyGibbsSampler(Sampler):
         log_proba_accept_total = xp.zeros((self.N,))
 
         # * prepare dict with other required variables for weights computation (other variables won't change so we declare it outside)
-        names_vars_involved = target_distribution.var_names
+        names_vars_involved = target_distribution.vars_involved
         current_candidate = {var_name: dict() for var_name in names_vars_involved}
         for var_name in names_vars_involved:
             if var_name != key:
@@ -578,7 +576,7 @@ class MyGibbsSampler(Sampler):
                 self.current[key] = target_distribution.compute_all(
                     self.current,
                     compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
-                )
+                ) # TODO: check if could do it with the indices idx_pix and the neglof_pdf, grad_neglog_pdf and hess_diag_neglog_pdf methods directly to save computations.
 
         # after loop
         return accept_total.mean(), log_proba_accept_total.mean()
@@ -610,7 +608,7 @@ class MyGibbsSampler(Sampler):
         log_rg_total = xp.zeros((new_var.shape[0],)) # (N, ) in general
 
         # * prepare dict with other required variables for weights computation (other variables won't change so we declare it outside)
-        names_vars_involved = target_distribution.var_names
+        names_vars_involved = target_distribution.vars_involved
         current_candidates = {var_name: dict() for var_name in names_vars_involved}
         for var_name in names_vars_involved:
             if var_name != key:

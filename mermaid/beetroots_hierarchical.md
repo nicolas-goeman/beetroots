@@ -352,7 +352,132 @@ The ```current``` attribute (dict) contain the following keys:
 
 We do not necessarily need to have the ```nll_utils``` or the ```forward_map_evals``` in the sampler as it would be messy with hierarchical models, speciafically for the ```nll_utils```. Moreover, if they are put in the sampler there might be duplicates as some distributions appear in different full conditionals.
 
-
-
 ### Questions:
 
+
+## Simulations
+
+Let's have a mermaid chart for everything that concerns the launch of a simulation. This incorporates files related to ```Simulation``` and ```RunMCMC``` classes and the children classes. Let us note that we only focus on the sampling solver and not the optimization one referred as *MAP* in the code. ```RunMCMC``` inherits from ```Run``` which also has children ```RunOptimMAP``` and ```RunOptimMLE``` that serve for this optimization approach which again is not of our interest here.
+
+
+```mermaid
+classDiagram
+    class Simulation {
+        <<abstract>>
+    }
+
+    class SimulationRealData {
+    }
+
+    class AstroSimulation {
+    }
+
+    class SimulationForwardMap {
+        <<abstract>>
+    }
+
+    class SimulationNN {
+    }
+
+    class SimulationPolynomialReg{
+    }
+
+    class SimulationObservation{
+        <<abstract>>
+    }
+    
+    class SimulationRealData{
+    }
+
+    class SimulationToyCase{
+    }
+
+    class SimulationPosteriorType{
+        <<abstract>>
+    }
+
+    class SimulationMySampler{
+    }
+
+    class SimulationMyGibbsSampler{
+    }
+
+    class SimulationRealDataNN{
+    }
+
+    class SimulationToyCaseNN{
+    }
+
+    class SimulationGaussianMixture{
+    }
+
+    class SensorLocalizationSimulation{
+    }
+
+    Simulation <|-- AstroSimulation
+    AstroSimulation <|-- SimulationForwardMap
+    SimulationForwardMap <|-- SimulationNN
+    SimulationForwardMap <|-- SimulationPolynomialReg
+    AstroSimulation <|-- SimulationObservation
+    SimulationObservation <|-- SimulationRealData
+    SimulationObservation <|-- SimulationToyCase
+    SimulationPosteriorType <|-- SimulationMySampler
+    SimulationPosteriorType <|-- SimulationMyGibbsSampler
+    Simulation <|-- SimulationRealData
+    SimulationRealData <|-- SimulationRealDataNN
+    SimulationNN <|-- SimulationRealDataNN
+    SimulationMySampler <|-- SimulationRealDataNN
+    SimulationNN <|-- SimulationToyCaseNN
+    SimulationToyCase <|-- SimulationToyCaseNN
+    SimulationMySampler <|-- SimulationToyCaseNN
+    SimulationPolynomialReg <|-- SimulationToyCasePolyReg
+    SimulationToyCase <|-- SimulationToyCasePolyReg
+    SimulationMySampler <|-- SimulationToyCasePolyReg
+    Simulation <|-- SimulationGaussianMixture
+    Simulation <|-- SensorLocalizationSimulation
+
+    style SimulationMyGibbsSampler stroke: #32CD32, stroke-dasharray: 5 5
+    style SimulationPosteriorType stroke: #ED7F10, stroke-dasharray: 5 5
+    style SimulationMySampler stroke: #ED7F10, stroke-dasharray: 5 5
+    style AstroSimulation stroke: #ED7F10
+    style SimulationRealDataNN stroke: #ED7F10
+    style SimulationToyCaseNN stroke: #ED7F10
+    style SimulationToyCasePolyReg stroke: #ED7F10
+
+
+ ```
+
+In order to switch to the hierarchical approach which is itself based on a Gibbs sampling approach, we have to understand what parts of this simulation class schema will need to be adapted or not.
+
+This whole hierarchy is here to simplify the code by having classes with specfific roles. For simpler problems (not astro with real or toy data), everything is embedded in a single class.
+
+**Classes with an ```__init__``` method:**
+
+* ```AstroSimulation```
+* ```SimulationGaussianMixture```
+* ```SensorLocalizationSimulation```
+
+**Classes with a dependence on the ```Posterior``` point of view:**
+
+* ```SimulationObservation```:
+  * ```save_and_plot_setup``` method requires **dict_posteriors** and use **likelihood** and **prior** parameters.
+* ```SimulationPosteriorType``` (will not be adapted as it the purpose, we should propose an equivalent):
+  * ```setup_posteriors``` is just an abstract class but suggests that we use ```Posterior``` instances.
+* ```SimulationMySampler``` (again normal since it is its purpose to work with ```Posterior``` objects):
+  * all the methods refer to ```Posterior``` instances.
+* ```SimulationRealDataNN```:
+  * all its methods are also based on ```Posterior``` objects since it is based on ```MySampler``` which was created according to the posterior point of view.
+* ```SimulationToyCaseNN```:
+  * all its methods are also based on ```Posterior``` objects since it is based on ```MySampler``` which was created according to the posterior point of view.
+* ```SimulationToyCasePolyreg```:
+  * all its methods are also based on ```Posterior``` objects since it is based on ```MySampler``` which was created according to the posterior point of view.
+  
+**Conclusions on updates:**
+
+We need to create/modify a few new ```Simulation``` classes for the Gibbs sampling/hierarchical approach:
+
+* Rename ```SimulationPosteriorType``` to ```SimulationTargetDistributionType``` and rename the abstract method ```setup_posteriors``` to ```setup_target_distributions```.
+* Create a class ```SimulationMyGibbsSampler``` which is an equivalent of the ```SimulationMySampler``` for the Gibbs sampler approach.
+* We must modify the ```AstroSimulation``` since the ```__init__``` method is based on the current ```.yaml``` file.
+* We would like to modify ```SimulationRealDataNN```, ```SimulationToyCaseNN``` and ```SimulationToyCasePolyreg``` so that it can fit any ```SimulationTargetDistributionType``` child class. Currently, the ```SimulationMySampler``` is hard-coded in it which is not ideal. We do not want to recreate a simulation class for each new kernel. We might need to remove the ```SimulationTargetDistributionType``` classes to use scripts instead. For each kernel we should just defined the way to deal with the params. The setup_posterior might come from a utils script which just takes the params dict.
+* All this framework is considered with a single set of observations so a single likelihood. For multimodality which would involve more likelihoods we should extend the approach.

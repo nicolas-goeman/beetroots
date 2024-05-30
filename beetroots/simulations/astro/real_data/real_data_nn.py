@@ -3,7 +3,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 
 from beetroots.modelling.priors.spatial_prior_params import SpatialPriorParams
-from beetroots.sampler.utils.my_sampler_params import MySamplerParams
+from beetroots.sampler.utils.sampler_params import MySamplerParams
 from beetroots.simulations.abstract_simulation import Simulation
 from beetroots.simulations.astro import data_validation
 from beetroots.simulations.astro.forward_map.abstract_nn import SimulationNN
@@ -43,6 +43,7 @@ class SimulationRealDataNN(SimulationNN, SimulationRealData, SimulationMySampler
 
     def setup(
         self,
+        # forwrad_model
         forward_model_name: str,
         force_use_cpu: bool,
         fixed_params: Dict[str, Optional[float]],
@@ -51,13 +52,14 @@ class SimulationRealDataNN(SimulationNN, SimulationRealData, SimulationMySampler
         data_int_path: str,
         data_err_path: str,
         sigma_m_float: float,
-        #
+        # prior_indicator
         indicator_margin_scale: float,
         lower_bounds_lin: np.ndarray,
         upper_bounds_lin: np.ndarray,
-        #
+        # spatial_prior
         with_spatial_prior: bool = True,
         spatial_prior_params: Union[None, SpatialPriorParams] = None,
+        # likelihood
         list_gaussian_approx_params: List[bool] = [],
         list_mixing_model_params: List[Dict[str, str]] = [],
     ):

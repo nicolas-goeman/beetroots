@@ -17,7 +17,7 @@ from beetroots.modelling.priors.smooth_indicator_prior import SmoothIndicatorPri
 from beetroots.modelling.priors.spatial_prior_params import SpatialPriorParams
 from beetroots.sampler.my_sampler import MySampler
 from beetroots.sampler.saver.my_saver import MySaver
-from beetroots.sampler.utils.my_sampler_params import MySamplerParams
+from beetroots.sampler.utils.sampler_params import MySamplerParams
 from beetroots.simulations.astro.posterior_type.abstract_posterior_type import (
     SimulationPosteriorType,
 )

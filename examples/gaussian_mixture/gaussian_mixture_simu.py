@@ -22,7 +22,7 @@ from beetroots.modelling.target_distribution.posterior import Posterior
 from beetroots.modelling.priors.smooth_indicator_prior import SmoothIndicatorPrior
 from beetroots.sampler.my_sampler import MySampler
 from beetroots.sampler.saver.my_saver import MySaver
-from beetroots.sampler.utils.my_sampler_params import MySamplerParams
+from beetroots.sampler.utils.sampler_params import MySamplerParams
 from beetroots.simulations.abstract_simulation import Simulation
 from beetroots.space_transform.id_transform import IdScaler
 

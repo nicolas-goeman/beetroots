@@ -38,7 +38,7 @@ class TargetDistribution(ABC):
         self.distribution_components = distribution_components
         """dict: dict of all distributions that compose the target distribution"""
 
-        self.var_names = list(distribution_components.keys())
+        self.vars_involved = list(distribution_components.keys())
         """list: list of all variable names involved in the target distribution"""
 
         self_var_name = var_name

@@ -28,7 +28,7 @@ class SimulationForwardMap(AstroSimulation, abc.ABC):
     def scale_dict_fixed_params(
         self, scaler: Scaler, dict_fixed_params: Dict[str, Optional[float]]
     ) -> Dict[str, Optional[float]]:
-        r"""transforms the fixed parameters from their value in their natural spae to their value in the space in which they are to be sampled.
+        r"""transforms the fixed parameters from their value in their natural space to their value in the space in which they are to be sampled.
 
         Note
         ----

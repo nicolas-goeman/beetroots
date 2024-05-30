@@ -159,14 +159,14 @@ class MySampler(Sampler):
         self,
         dict_model_check: dict,
         likelihood: Likelihood,
-        nll_full: np.ndarray,
+        nll_pixelwise: np.ndarray,
         objective: float,
     ) -> dict:
         count_pval = dict_model_check["count_pval"] * 1
         y_copy = likelihood.y * 1
 
         dict_model_check["clppd_online"] *= count_pval / (count_pval + 1) # Just used by the saver ?
-        dict_model_check["clppd_online"] += np.exp(-nll_full) / (count_pval + 1)
+        dict_model_check["clppd_online"] += np.exp(-nll_pixelwise) / (count_pval + 1)
 
         y_rep = likelihood.sample_observation_model(
             self.current["forward_map_evals"],
@@ -182,10 +182,10 @@ class MySampler(Sampler):
             idx=None,
             compute_derivatives=False,
         )
-        nll_y_rep_full = likelihood_rep.neglog_pdf(
+        nll_y_rep_pixelwise = likelihood_rep.neglog_pdf(
             self.current["forward_map_evals"],
             nll_utils_rep,
-            full=True,
+            pixelwise=True,
         )
 
         # p-value per (N, L) with y_rep_{n,ell} <= y_{n,ell}
@@ -194,8 +194,8 @@ class MySampler(Sampler):
 
         # p-value per (N,) with
         # p(y_rep_n \vert theta_n) <= p(y_n \vert theta_n)
-        nll_y = np.sum(nll_full, axis=1)  # (N,)
-        nll_y_rep = np.sum(nll_y_rep_full, axis=1)  # (N,)
+        nll_y = np.sum(nll_pixelwise, axis=1)  # (N,)
+        nll_y_rep = np.sum(nll_y_rep_pixelwise, axis=1)  # (N,)
 
         dict_model_check["p_values_llh"] *= count_pval / (count_pval + 1)
         dict_model_check["p_values_llh"] += (nll_y_rep >= nll_y) / (count_pval + 1)
@@ -209,7 +209,7 @@ class MySampler(Sampler):
         dict_model_check: dict,
         likelihood: Likelihood,
         forward_map_evals: dict,
-        nll_full: np.ndarray,
+        nll_pixelwise: np.ndarray,
     ) -> dict:
         
         # this p-value should be between 0 and 0.5
@@ -413,7 +413,7 @@ class MySampler(Sampler):
                 additional_sampling_log["accepted_t"] = accepted_t
                 additional_sampling_log["log_proba_accept_t"] = log_proba_accept_t
 
-                dict_objective, nll_full = posterior.compute_all_for_saver(
+                dict_objective, nll_pixelwise = posterior.compute_all_for_saver(
                     self.current["Theta"],
                     self.current["forward_map_evals"],
                     self.current["nll_utils"],
@@ -423,7 +423,7 @@ class MySampler(Sampler):
                     dict_model_check = self._update_model_check_values(
                         dict_model_check,
                         posterior.likelihood,
-                        nll_full,
+                        nll_pixelwise,
                         dict_objective["objective"] * 1,
                     )
 
@@ -457,7 +457,7 @@ class MySampler(Sampler):
                 additional_sampling_log["accepted_t"] = accepted_t
                 additional_sampling_log["log_proba_accept_t"] = log_proba_accept_t
 
-                dict_objective, nll_full = posterior.compute_all_for_saver(
+                dict_objective, nll_pixelwise = posterior.compute_all_for_saver(
                     self.current["Theta"],
                     self.current["forward_map_evals"],
                     self.current["nll_utils"],
@@ -467,7 +467,7 @@ class MySampler(Sampler):
                     dict_model_check = self._update_model_check_values(
                         dict_model_check,
                         posterior.likelihood,
-                        nll_full,
+                        nll_pixelwise,
                         dict_objective["objective"] * 1,
                     )
 
@@ -496,7 +496,7 @@ class MySampler(Sampler):
             dict_model_check,
             likelihood=posterior.likelihood,
             forward_map_evals=self.current["forward_map_evals"],
-            nll_full=nll_full,
+            nll_pixelwise=nll_pixelwise,
         )
 
         saver.save_additional(

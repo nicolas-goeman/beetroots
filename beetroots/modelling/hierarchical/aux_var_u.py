@@ -10,7 +10,7 @@ except ImportError:
 from scipy.special import log_ndtr
 
 
-class AuxiliaryGivenTarget(Likelihood, Hierarchical):
+class AuxiliaryGivenTarget(Likelihood, Hierarchical): #TODO: check is Likelihood inheritance is relevant
     r"""Class implementing the conditional distribution :math:`U|\Theta` for both full conditional distributions :math:`\pi(U|\Theta, Y)` and :math:`\pi(\Theta|U, Y)`."""
 
     def __init__(
@@ -241,9 +241,10 @@ class ObservationsGivenAuxiliary(Likelihood):
 
     def neglog_pdf(
         self,
+        current: dict[str, dict],
         pixelwise: bool = False,
         full: bool = False,
-        idx: Optional[xp.ndarray] = None,
+        idx_pix: Optional[xp.ndarray] = None,
     ) -> Union[float, xp.ndarray]:
         out = xp.zeros((self.N, self.L))
         out += xp.where(
