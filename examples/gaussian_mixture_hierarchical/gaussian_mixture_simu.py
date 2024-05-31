@@ -10,7 +10,12 @@ import matplotlib
 matplotlib.use('Agg')
 
 import matplotlib.transforms as transforms
-import numpy as np
+
+try:
+    import cupy as xp
+except:
+    import numpy as xp
+
 import pandas as pd
 from gaussian_mixture_likelihood import GaussianMixtureLikelihood
 from matplotlib.patches import Ellipse
@@ -20,9 +25,9 @@ from beetroots.inversion.run.run_mcmc import RunMCMC
 from beetroots.modelling.forward_maps.identity import BasicForwardMap
 from beetroots.modelling.target_distribution.posterior import Posterior
 from beetroots.modelling.priors.smooth_indicator_prior import SmoothIndicatorPrior
-from beetroots.sampler.my_sampler import MySampler
+from beetroots.sampler.my_gibbs_sampler import MyGibbsSampler
 from beetroots.sampler.saver.my_saver import MySaver
-from beetroots.sampler.utils.sampler_params import MySamplerParams
+from beetroots.sampler.utils.sampler_params import MyGibbsSamplerParams
 from beetroots.simulations.abstract_simulation import Simulation
 from beetroots.space_transform.id_transform import IdScaler
 
@@ -47,11 +52,11 @@ def confidence_ellipse(x, cov, ax, n_std=3.0, facecolor="none", **kwargs):
     -------
     matplotlib.patches.Ellipse
     """
-    pearson = cov[0, 1] / np.sqrt(cov[0, 0] * cov[1, 1])
+    pearson = cov[0, 1] / xp.sqrt(cov[0, 0] * cov[1, 1])
     # Using a special case to obtain the eigenvalues of this
     # two-dimensionl dataset.
-    ell_radius_x = np.sqrt(1 + pearson)
-    ell_radius_y = np.sqrt(1 - pearson)
+    ell_radius_x = xp.sqrt(1 + pearson)
+    ell_radius_y = xp.sqrt(1 - pearson)
     ellipse = Ellipse(
         (0, 0),
         width=ell_radius_x * 2,
@@ -63,11 +68,11 @@ def confidence_ellipse(x, cov, ax, n_std=3.0, facecolor="none", **kwargs):
     # Calculating the stdandard deviation of x from
     # the squareroot of the variance and multiplying
     # with the given number of standard deviations.
-    scale_x = np.sqrt(cov[0, 0]) * n_std
+    scale_x = xp.sqrt(cov[0, 0]) * n_std
     mean_x = x[0]
 
     # calculating the stdandard deviation of y ...
-    scale_y = np.sqrt(cov[1, 1]) * n_std
+    scale_y = xp.sqrt(cov[1, 1]) * n_std
     mean_y = x[1]
 
     transf = (
@@ -94,9 +99,9 @@ def read_gaussian_distribution_file(modes_filename: str):
     -------
     n_means : int
         number of modes in the gaussian mixture
-    list_means : np.ndarray of shape (n_means, D)
+    list_means : xp.ndarray of shape (n_means, D)
         list of modes' positions
-    list_cov : np.ndarray of shape (n_means, D, D)
+    list_cov : xp.ndarray of shape (n_means, D, D)
         list of modes' covariance matrices
     """
     D = 2
@@ -108,10 +113,10 @@ def read_gaussian_distribution_file(modes_filename: str):
     n_means = len(df_mixture)
 
     list_means = df_mixture.loc[
-        np.arange(n_means), ["x_0", "x_1"]
+        xp.arange(n_means), ["x_0", "x_1"]
     ].values  # (n_means, self.D)
 
-    list_cov = np.zeros((n_means, D, D))
+    list_cov = xp.zeros((n_means, D, D))
     for i in range(n_means):
         list_cov[i, 0, 0] = df_mixture.at[i, "sigma2_0"]
         list_cov[i, 1, 1] = df_mixture.at[i, "sigma2_1"]
@@ -204,8 +209,8 @@ class SimulationGaussianMixture(Simulation):
 
     def plot_ellipses(
         self,
-        lower_bounds_lin: np.ndarray,
-        upper_bounds_lin: np.ndarray,
+        lower_bounds_lin: xp.ndarray,
+        upper_bounds_lin: xp.ndarray,
     ):
         fig, ax = plt.subplots(1, 1, figsize=(8, 7))
         ax.set_title(
@@ -246,8 +251,8 @@ class SimulationGaussianMixture(Simulation):
     def setup_target_distribution(
         self,
         indicator_margin_scale: float,
-        lower_bounds_lin: np.ndarray,
-        upper_bounds_lin: np.ndarray,
+        lower_bounds_lin: xp.ndarray,
+        upper_bounds_lin: xp.ndarray,
     ) -> Tuple[dict, IdScaler]:
         # likelihood
         scaler, forward_map = self.setup_forward_map()
@@ -256,13 +261,14 @@ class SimulationGaussianMixture(Simulation):
             self.D,
             self.list_means,
             self.list_cov,
+            var_name='theta'
         )
 
         # indicator prior
-        list_idx_sampling = np.arange(self.D)
+        list_idx_sampling = xp.arange(self.D)
 
-        lower_bounds_lin = np.array(lower_bounds_lin)
-        upper_bounds_lin = np.array(upper_bounds_lin)
+        lower_bounds_lin = xp.array(lower_bounds_lin)
+        upper_bounds_lin = xp.array(upper_bounds_lin)
 
         lower_bounds = scaler.from_lin_to_scaled(
             lower_bounds_lin.reshape((self.N, self.D)),
@@ -287,15 +293,16 @@ class SimulationGaussianMixture(Simulation):
             likelihood_,
             prior_spatial=None,
             prior_indicator=prior_indicator,
+            var_name='theta'
         )
-        dict_posteriors = {"gaussian_mixture": posterior_}
+        dict_posteriors = {"gaussian_mixture": [posterior_]}
         return dict_posteriors, scaler
 
     def setup(
         self,
         indicator_margin_scale: float,
-        lower_bounds_lin: np.ndarray,
-        upper_bounds_lin: np.ndarray,
+        lower_bounds_lin: xp.ndarray,
+        upper_bounds_lin: xp.ndarray,
     ):
         dict_posteriors, scaler = self.setup_target_distribution(
             indicator_margin_scale,
@@ -314,7 +321,7 @@ class SimulationGaussianMixture(Simulation):
                 upper_bounds_lin,
             )
 
-        Theta_true_scaled = np.mean(self.list_means, 0)
+        Theta_true_scaled = xp.mean(self.list_means, 0)
         self.Theta_true_scaled = Theta_true_scaled.reshape((self.N, self.D))
         return dict_posteriors, scaler
 
@@ -322,7 +329,7 @@ class SimulationGaussianMixture(Simulation):
         self,
         dict_posteriors: Dict[str, Posterior],
         scaler: IdScaler,
-        sampler_: MySampler,
+        sampler_: MyGibbsSampler,
         N_MCMC: int,
         T_MC: int,
         T_BI: int,
@@ -342,7 +349,7 @@ class SimulationGaussianMixture(Simulation):
             L=self.L,
             scaler=scaler,
             batch_size=100,
-            list_idx_sampling=np.arange(self.D),
+            list_idx_sampling=xp.arange(self.D),
         )
 
         run_mcmc = RunMCMC(self.path_data_csv_out, self.max_workers)
@@ -378,7 +385,7 @@ class SimulationGaussianMixture(Simulation):
                 model_name=model_name,
                 scaler=scaler,
                 list_names=self.list_names,
-                list_idx_sampling=np.arange(self.D),
+                list_idx_sampling=xp.arange(self.D),
                 list_fixed_values=[None for _ in range(self.D)],
                 #
                 plot_1D_chains=plot_1D_chains,
@@ -413,8 +420,8 @@ if __name__ == "__main__":
         path_outputs=path_outputs,
     )
 
-    sampler_ = MySampler(
-        MySamplerParams(**params["sampling_params"]["mcmc"]),
+    sampler_ = MyGibbsSampler(
+        MyGibbsSamplerParams(**params["sampling_params"]["mcmc"]),
         simulation_gmm.D,
         simulation_gmm.L,
         simulation_gmm.N,

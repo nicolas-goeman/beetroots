@@ -11,7 +11,7 @@ from beetroots.simulations.astro.forward_map.abstract_poly_reg import (
     SimulationPolynomialReg,
 )
 from beetroots.simulations.astro.observation.abstract_toy_case import SimulationToyCase
-from beetroots.simulations.astro.posterior_type.abstract_direct import (
+from beetroots.simulations.astro.posterior_type.abstract_mysampler import (
     SimulationMySampler,
 )
 
@@ -84,7 +84,7 @@ class SimulationToyCasePolyReg(
         )
 
         # run setup
-        dict_posteriors, scaler, prior_indicator_1pix = self.setup_posteriors(
+        dict_posteriors, scaler, prior_indicator_1pix = self.setup_target_distribution(
             scaler=scaler,
             forward_map=forward_map,
             y=y,

@@ -51,7 +51,7 @@ class RunMCMC(Run):
         r"""prepares the run in two ways :
 
         * step 1 : creates empty folders to save the run results
-        * step 2 : reads ``Theta_0`` if specified (as the MLE or MAP)
+        * step 2 : reads ``Vars_0`` if specified (as the MLE or MAP)
 
         Parameters
         ----------
@@ -73,7 +73,7 @@ class RunMCMC(Run):
         Returns
         -------
         Optional[np.ndarray]
-            starting point of the  (in scaled space) inversion, ``Theta_0``, if specified. Otherwise ``None``.
+            starting point of the  (in scaled space) inversion, ``Vars_0``, if specified. Otherwise ``None``.
         """
         # step 1 : create empty folders to save the run results
         for seed in range(N_runs):
@@ -83,30 +83,30 @@ class RunMCMC(Run):
                 if not os.path.isdir(folder_path):
                     os.mkdir(folder_path)
 
-        # step 2 : read Theta_0 if needed
+        # step 2 : read Vars_0 if needed
         assert start_from in ["MLE", "MAP", None]
         model_name = list(dict_posteriors.keys())[0]
 
         if start_from == "MLE":
             assert path_csv_mle is not None
-            Theta_0, _ = ResultsExtractorOptimMLE.read_estimator(
+            Vars_0, _ = ResultsExtractorOptimMLE.read_estimator(
                 path_csv_mle,
                 model_name,
             )
-            Theta_0 = scaler.from_lin_to_scaled(Theta_0)
+            Vars_0 = scaler.from_lin_to_scaled(Vars_0)
 
         elif start_from == "MAP":
             assert path_csv_map is not None
-            Theta_0, _ = ResultsExtractorOptimMAP.read_estimator(
+            Vars_0, _ = ResultsExtractorOptimMAP.read_estimator(
                 path_csv_map,
                 model_name,
             )
-            Theta_0 = scaler.from_lin_to_scaled(Theta_0)
+            Vars_0 = scaler.from_lin_to_scaled(Vars_0)
 
         else:
-            Theta_0 = None
+            Vars_0 = None
 
-        return Theta_0
+        return Vars_0
 
     def run(
         self,
@@ -117,7 +117,7 @@ class RunMCMC(Run):
         max_iter: int,
         T_BI: int,
         path_raw: str,
-        Theta_0: Optional[np.ndarray] = None,
+        Vars_0: Optional[np.ndarray] = None,
         # sample_regu_weights: bool = True,
         # T_BI_reguweights: Optional[int] = None,
         #
@@ -147,7 +147,7 @@ class RunMCMC(Run):
             duration of the `Burn-in` phase
         path_raw : str
             path to the folders where the ``.hdf5`` files are to be stored
-        Theta_0 : Optional[np.ndarray], optional
+        Vars_0 : Optional[np.ndarray], optional
             starting point, by default None
         regu_spatial_N0 : Union[int, float], optional
             number of iterations defining the initial update phase (for spatial regularization weight optimization). np.infty means that the optimization phase never starts, and that the weight optimization is not applied. by default np.infty
@@ -181,7 +181,7 @@ class RunMCMC(Run):
                 dict_posteriors[model_name],
                 saver=saver_seed,
                 max_iter=max_iter,
-                Theta_0=Theta_0,
+                Vars_0=Vars_0,
                 #
                 # sample_regu_weights=sample_regu_weights,
                 # T_BI_reguweights=T_BI_reguweights,
@@ -293,7 +293,7 @@ class RunMCMC(Run):
         can_run_in_parallel : bool, optional
             wether the inversion can be run in parallel (may cause difficulties for forward maps based on neural networks run on GPU), by default True
         """
-        Theta_0 = self.prepare_run(
+        Vars_0 = self.prepare_run(
             dict_posteriors,
             path_raw,
             N_runs,
@@ -310,7 +310,7 @@ class RunMCMC(Run):
             max_iter=max_iter,
             T_BI=T_BI,
             path_raw=path_raw,
-            Theta_0=Theta_0,
+            Vars_0=Vars_0,
             #
             regu_spatial_N0=regu_spatial_N0,
             regu_spatial_scale=regu_spatial_scale,

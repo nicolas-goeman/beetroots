@@ -9,7 +9,7 @@ from beetroots.simulations.abstract_simulation import Simulation
 from beetroots.simulations.astro import data_validation
 from beetroots.simulations.astro.forward_map.abstract_nn import SimulationNN
 from beetroots.simulations.astro.observation.abstract_toy_case import SimulationToyCase
-from beetroots.simulations.astro.posterior_type.abstract_direct import (
+from beetroots.simulations.astro.posterior_type.abstract_mysampler import (
     SimulationMySampler,
 )
 
@@ -84,7 +84,7 @@ class SimulationToyCaseNN(SimulationNN, SimulationToyCase, SimulationMySampler):
         )
 
         # run setup
-        dict_posteriors, scaler, prior_indicator_1pix = self.setup_posteriors(
+        dict_posteriors, scaler, prior_indicator_1pix = self.setup_target_distribution(
             scaler=scaler,
             forward_map=forward_map,
             y=y,

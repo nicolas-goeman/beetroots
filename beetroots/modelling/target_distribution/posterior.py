@@ -1,6 +1,9 @@
 from typing import Dict, Optional, Tuple, Union
 
 from beetroots.modelling.target_distribution.abstract_target_distribution import TargetDistribution
+from beetroots.modelling.likelihoods.abstract_likelihood import Likelihood
+from beetroots.modelling.priors.smooth_indicator_prior import SmoothIndicatorPrior
+from beetroots.modelling.priors.abstract_spatial_prior import SpatialPrior
 
 try:
     import cupy as xp
@@ -25,15 +28,15 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
         D: int,
         L: int,
         N: int,
+        likelihood: Likelihood,
         var_name: str,
-        likelihood,
-        prior_spatial=None,
-        prior_indicator=None,
+        prior_spatial: Optional[Union[None, SpatialPrior]] = None,
+        prior_indicator: Optional[Union[None, SmoothIndicatorPrior]] = None,
         separable: bool = True,
         dict_sites: Optional[Dict[int, xp.ndarray]] = None,
     ):
-        distribution_components = [likelihood, prior_spatial, prior_indicator] # not filtered for None
-        super().__init__(D, L, N, var_name, [dist_comp for dist_comp in distribution_components if dist_comp is not None], separable)
+        distribution_components = {'likelihood':likelihood, 'prior_spatial': prior_spatial, 'prior_indicator': prior_indicator} # not filtered for None
+        super().__init__(D, L, N, var_name, {key: val for key, val in distribution_components.items() if val is not None}, separable)
 
         self.likelihood = likelihood
         """Likelihood: data-fidelity term"""
@@ -100,7 +103,8 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
             self.update_nlpdf_utils(current, idx_pix=idx_pix, compute_derivatives=False, compute_derivatives_2nd_order=False)
 
         if pixelwise:
-            out = xp.zeros((self.N, self.L))
+            size_ = self.N if idx_pix is None else idx_pix.size
+            out = xp.zeros((size_, self.L))
         else:
             out = 0.0
 

@@ -27,7 +27,7 @@ class ComponentDistribution(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def grad_neglog_pdf(
+    def gradient_neglog_pdf(
         self,
         **kwargs,
     ) -> xp.ndarray:

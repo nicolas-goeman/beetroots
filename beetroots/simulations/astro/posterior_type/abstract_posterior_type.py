@@ -1,9 +1,9 @@
 import abc
 
 
-class SimulationPosteriorType(abc.ABC):
+class SimulationTargetDistributionType(abc.ABC):
     @abc.abstractmethod
-    def setup_posteriors(self):
+    def setup_target_distribution(self):
         pass
 
     @abc.abstractmethod

@@ -120,27 +120,27 @@ class Sampler(abc.ABC):
 
         return Theta
 
-    @abc.abstractmethod
-    def generate_random_start_Theta_1pix(
-        self, Theta: np.ndarray, posterior: Posterior, idx_pix: np.ndarray
-    ) -> np.ndarray:
-        r"""draws a random vectors for components :math:`n` (e.g., a pixel :math:`\theta_n`).
+    # @abc.abstractmethod # TODO: check if there is a problem if we remove it (not necessary in MyGibbsSampler)
+    # def generate_random_start_Theta_1pix(
+    #     self, Theta: np.ndarray, posterior: Posterior, idx_pix: np.ndarray
+    # ) -> np.ndarray:
+    #     r"""draws a random vectors for components :math:`n` (e.g., a pixel :math:`\theta_n`).
 
-        Parameters
-        ----------
-        Theta : np.ndarray
-            current iterate
-        posterior : Posterior
-            contains the lower and upper bounds of the hypercube
-        idx_pix : np.ndarray
-            indices of the pixels
+    #     Parameters
+    #     ----------
+    #     Theta : np.ndarray
+    #         current iterate
+    #     posterior : Posterior
+    #         contains the lower and upper bounds of the hypercube
+    #     idx_pix : np.ndarray
+    #         indices of the pixels
 
-        Returns
-        -------
-        np.array of shape (n_pix, self.k_mtm, D)
-            random element of the hypercube defined by the lower and upper bounds with uniform distribution
-        """
-        pass
+    #     Returns
+    #     -------
+    #     np.array of shape (n_pix, self.k_mtm, D)
+    #         random element of the hypercube defined by the lower and upper bounds with uniform distribution
+    #     """
+    #     pass
 
     @abc.abstractmethod
     def sample(

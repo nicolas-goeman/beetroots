@@ -497,7 +497,7 @@ class MixingModelsLikelihood(Likelihood):
         # self.nlpdf_utils["censored_mask"].size = N_candidates * self.L if candidates
 
         if self.nlpdf_utils['k_mtm'] > 0:
-                nlpdf = nlpdf.reshape((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.nlpdf_utils['L']))
+            nlpdf = nlpdf.reshape((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.nlpdf_utils['L']))
 
         if full:
             return nlpdf  # (n_pix, L) or (n_pix, k_mtm, L)
@@ -909,6 +909,8 @@ class MixingModelsLikelihood(Likelihood):
         mtm: bool = False,
     ) -> None:
         
+        self.nlpdf_utils['mtm'] = mtm
+
         shape_var = current[self.var_name]['var'].shape
         assert isinstance(mtm, bool), f"mtm should be a boolean, got {type(mtm)}"
         
@@ -927,11 +929,15 @@ class MixingModelsLikelihood(Likelihood):
         self.nlpdf_utils = {}
 
         n_pix = idx_pix.size if idx_pix is not None else self.N *1
-        k_mtm = k_mtm = shape_var.shape[1] if mtm else 0
+        k_mtm = shape_var.shape[1] if mtm else 0
         if n_pix == self.N:
             idx_pix = np.arange(self.N)
         N_pix = self.forward_map_evals["f_Var"].shape[0]
         assert n_pix * k_mtm == N_pix
+
+        self.nlpdf_utils['n_pix'] = n_pix
+        self.nlpdf_utils['N_pix'] = N_pix
+        self.nlpdf_utils['k_mtm'] = k_mtm
 
         # * bias and variance
         if mtm is False:
@@ -974,11 +980,6 @@ class MixingModelsLikelihood(Likelihood):
                 omega.transpose((2, 0, 1)).reshape((self.L, N_pix)).T
             )  # .reshape((N_pix, self.L))            omega
         
-
-        self.nlpdf_utils['n_pix'] = n_pix
-        self.nlpdf_utils['N_pix'] = N_pix
-        self.nlpdf_utils['k_mtm'] = k_mtm
-
         # * -----
         self.nlpdf_utils["censored_mask"] = (y <= omega) * 1
         self.nlpdf_utils["sigma_a"] = sigma_a * 1

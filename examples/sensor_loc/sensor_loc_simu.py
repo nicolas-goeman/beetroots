@@ -288,7 +288,7 @@ class SensorLocalizationSimulation(Simulation):
         )
         return y
 
-    def setup_posteriors(
+    def setup_target_distribution(
         self,
         filename_obs: str,
         R: float,
@@ -354,7 +354,7 @@ class SensorLocalizationSimulation(Simulation):
         lower_bounds_lin: np.ndarray,
         upper_bounds_lin: np.ndarray,
     ):
-        dict_posteriors, scaler = self.setup_posteriors(
+        dict_posteriors, scaler = self.setup_target_distribution(
             filename_obs,
             R,
             sigma_a,

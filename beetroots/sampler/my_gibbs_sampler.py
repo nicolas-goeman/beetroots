@@ -53,11 +53,8 @@ class MyGibbsSampler(Sampler):
             random number generator (for reproducibility), by default xp.random.default_rng(42)
         """
 
-        self.proposal_distribution_mtm = my_gibbs_sampler_params.proposal_distribution_mtm
+        self.proposal_distribution_mtm = my_gibbs_sampler_params.proposal_distributions_mtm
         r"""dict[function]: function to generate random start values for the variables"""
-
-        self.proposal_distribution_mtm_kwargs = my_gibbs_sampler_params.proposal_distribution_mtm_kwargs
-        r"""dict[dict]: kwargs for the function to generate random start values for the variables"""
 
         # P-MALA params
         # ! redefine size of params
@@ -166,7 +163,7 @@ class MyGibbsSampler(Sampler):
         target_distributions: dict[str, TargetDistribution],
         saver: HierarchicalSaver,
         max_iter: int,
-        vars_0: dict[str, Union[None, xp.ndarray]],
+        Vars_0: dict[str, Union[None, xp.ndarray]],
         disable_progress_bar: bool = False,
         #
         regu_spatial_N0: Union[int, float] = xp.infty, # sets to infinity by default => no optimization of reg. params.
@@ -204,14 +201,14 @@ class MyGibbsSampler(Sampler):
         """
         var_names = list(target_distributions.keys())
 
-        assert len(target_distributions) == len(vars_0), "vars_0 should have the same number of variables as target_distributions. If no initial value is provided for a variable it should be set to None in the vars_0 dict."
-        assert set(target_distributions.keys()) == set(vars_0.keys()), "vars_0 should have the same variable names (keys of dict) as target_distributions"
+        assert len(target_distributions) == len(Vars_0), "Vars_0 should have the same number of variables as target_distributions. If no initial value is provided for a variable it should be set to None in the Vars_0 dict."
+        assert set(target_distributions.keys()) == set(Vars_0.keys()), "Vars_0 should have the same variable names (keys of dict) as target_distributions"
+        
+        for key in var_names.keys():
+            if Vars_0[key] is None:
+                Vars_0[key] = target_distributions[key].generate_random_start_var()  # (N, D)
 
-        for key in var_names:
-            if vars_0[key] is None:
-                vars_0[key] = target_distributions[key].generate_random_start_var()  # (N, D)
-
-        assert None not in vars_0.values(), "vars_0 should not contain None values after generating random start values"
+        assert None not in Vars_0.values(), "Vars_0 should not contain None values after generating random start values"
         
         # TODO: change the following to check shape of initial values
         # assert Theta_0.shape == (self.N, self.D)
@@ -220,7 +217,7 @@ class MyGibbsSampler(Sampler):
         dict_objective = {}
         for key in var_names:
             self.current[key] = target_distributions[key].compute_all(
-                vars_0[key], compute_derivatives_2nd_order=self.compute_derivatives_2nd_order
+                Vars_0[key], compute_derivatives_2nd_order=self.compute_derivatives_2nd_order
             )
             assert xp.isnan(self.current[key]["objective"]) == 0
             assert xp.sum(xp.isnan(self.current[key]["grad"])) == 0
@@ -631,7 +628,7 @@ class MyGibbsSampler(Sampler):
             candidates = new_var * 1
             candidates = candidates.reshape((new_var.shape[0], 1, *new_var.shape[1:])).repeat(self.k_mtm + 1, axis=1)  # (N, k_mtm, ...)
             candidates[idx_pix, :-1, ...] = self.proposal_distribution_mtm[key].sample(
-                new_var, idx_pix, self.proposal_distribution_mtm_kwargs[key]
+                new_var, idx_pix
             )
 
             # --- COMPUTE WEIGHTS (USING LOG)

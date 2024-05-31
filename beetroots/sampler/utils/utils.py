@@ -172,6 +172,7 @@ def sample_conditional_spatial_and_indicator_prior(
     xp.ndarray
         samples drawn from the conditional prior
     """
+    # FIXME: while loop in the code is not good. Modify proposal for box constraints.
     xp.random.seed(seed)
     (N, D) = current_Theta.shape
     n_pix = idx_pix.size * 1

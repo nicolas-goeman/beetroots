@@ -11,10 +11,31 @@ class ProposalIndicator:
     r"""Dataclass that implement the proposal distribution based on the smooth indicator prior"""
 
     __slots__ = (
-        "prior_indicator_lower_bounds",
-        "prior_indicator_upper_bounds",
-        "prior_indicator_margin_scale",
+        "lower_bounds",
+        "upper_bounds",
+        "margin_scale",
     )
+
+    def __init__(
+        self,
+        lower_bounds: xp.ndarray,
+        upper_bounds: xp.ndarray,
+        indicator_margin_scale: float,
+    ) -> None:
+        r"""
+        Parameters
+        ----------
+        lower_bounds : xp.ndarray of shape (D,)
+            lower bounds of the indicator prior
+        upper_bounds : xp.ndarray of shape (D,)
+            upper bounds of the indicator prior
+        indicator_margin_scale : float
+            margin scale of the indicator prior
+        """
+        self.lower_bounds = lower_bounds
+        self.upper_bounds = upper_bounds
+        self.margin_scale = indicator_margin_scale
+        
 
     def sample(
         self,
@@ -25,12 +46,12 @@ class ProposalIndicator:
         seed = self.rng.integers(0, 1_000_000_000)
 
         n_pix = idx_pix.size
-        _shape = self.prior_indicator_lower_bounds.shape
+        _shape = self.lower_bounds.shape
 
         return utils.sample_smooth_indicator(
-                self.prior_indicator_lower_bounds,
-                self.prior_indicator_upper_bounds,
-                self.prior_indicator_margin_scale,
+                self.lower_bounds,
+                self.upper_bounds,
+                self.margin_scale,
                 size=(n_pix * k_mtm, *_shape),
                 seed=seed,
             ).reshape((n_pix, k_mtm, *_shape))
@@ -58,9 +79,9 @@ class ProposalIndicator:
         k_mtm = candidates.shape[1]
 
         _pdf = penalty_one_pix(candidates[idx_pix].reshape(-1, candidates.shape[2:]),
-                        self.prior_indicator_lower_bounds,
-                        self.prior_indicator_upper_bounds,
-                        self.prior_indicator_margin_scale)  # (n_pix * k_mtm)
+                        self.lower_bounds,
+                        self.upper_bounds,
+                        self.margin_scale)  # (n_pix * k_mtm)
         
         return _pdf.reshape((n_pix, k_mtm))
 

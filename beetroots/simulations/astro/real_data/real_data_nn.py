@@ -10,7 +10,7 @@ from beetroots.simulations.astro.forward_map.abstract_nn import SimulationNN
 from beetroots.simulations.astro.observation.abstract_real_data import (
     SimulationRealData,
 )
-from beetroots.simulations.astro.posterior_type.abstract_direct import (
+from beetroots.simulations.astro.posterior_type.abstract_mysampler import (
     SimulationMySampler,
 )
 
@@ -43,7 +43,7 @@ class SimulationRealDataNN(SimulationNN, SimulationRealData, SimulationMySampler
 
     def setup(
         self,
-        # forwrad_model
+        # forward_model
         forward_model_name: str,
         force_use_cpu: bool,
         fixed_params: Dict[str, Optional[float]],
@@ -88,7 +88,8 @@ class SimulationRealDataNN(SimulationNN, SimulationRealData, SimulationMySampler
         # run setup
         print(f"lower_bounds_lin = {lower_bounds_lin}")
 
-        dict_posteriors, scaler, prior_indicator_1pix = self.setup_posteriors(
+        dict_posteriors, scaler, prior_indicator_1pix = self.setup_target_distribution(
+            # always needed for astro
             scaler=scaler,
             forward_map=forward_map,
             y=y_fit,
@@ -96,6 +97,7 @@ class SimulationRealDataNN(SimulationNN, SimulationRealData, SimulationMySampler
             sigma_m=sigma_m_fit,
             omega=omega_fit,
             syn_map=df_int_fit,
+            # Component distributions params
             with_spatial_prior=with_spatial_prior,
             spatial_prior_params=spatial_prior_params,
             indicator_margin_scale=indicator_margin_scale,

@@ -15,6 +15,9 @@ class TargetDistribution(ABC):
         "L",
         "N",
         "dict_sites",
+        "distribution_components",
+        "vars_involved",
+        'var_name',
     )
 
     def __init__(
