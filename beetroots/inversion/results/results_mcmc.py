@@ -225,21 +225,24 @@ class ResultsExtractorMCMC(ResultsExtractor):
             self.freq_save * 1,
         ).main(list_mcmc_folders)
 
+        # FIXME: quick workaround to try GMM toy example with Gibbs sampler. Uncomment and remove the additional code after.
         # objective evolution
         if Theta_true_scaled is not None:
-            forward_map_evals = posterior.likelihood.evaluate_all_forward_map(
-                Theta_true_scaled,
-                compute_derivatives=False,
-                compute_derivatives_2nd_order=False,
-            )
-            nll_utils = posterior.likelihood.evaluate_all_nll_utils(
-                forward_map_evals,
-                compute_derivatives=False,
-                compute_derivatives_2nd_order=False,
-            )
-            objective_true = posterior.neglog_pdf(
-                Theta_true_scaled, forward_map_evals, nll_utils
-            )
+            # forward_map_evals = posterior.likelihood.evaluate_all_forward_map(
+            #     Theta_true_scaled,
+            #     compute_derivatives=False,
+            #     compute_derivatives_2nd_order=False,
+            # )
+            # nll_utils = posterior.likelihood.evaluate_all_nll_utils(
+            #     forward_map_evals,
+            #     compute_derivatives=False,
+            #     compute_derivatives_2nd_order=False,
+            # )
+            # objective_true = posterior.neglog_pdf(
+            #     Theta_true_scaled, forward_map_evals, nll_utils
+            # )
+            current = {'theta': {'var': Theta_true_scaled}}
+            objective_true = posterior.neglog_pdf(current=current, update_nlpdf_utils=True)
 
         else:
             objective_true = np.nan

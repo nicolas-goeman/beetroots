@@ -97,18 +97,20 @@ class ResultsMMSEandCI(ResultsUtil):
         # evaluate objective
         Theta_mmse_scaled = Theta_mmse_scaled_full[:, list_idx_sampling]
 
-        forward_map_evals = posterior.likelihood.evaluate_all_forward_map(
-            Theta_mmse_scaled,
-            compute_derivatives=False,
-            compute_derivatives_2nd_order=False,
-        )
-        nll_utils = posterior.likelihood.evaluate_all_nll_utils(
-            forward_map_evals,
-            compute_derivatives=False,
-            compute_derivatives_2nd_order=False,
-        )
+        # FIXME: quick workarround to try GMM toy case with Gibbs sampler. Uncomment and remove added code after.
+        # forward_map_evals = posterior.likelihood.evaluate_all_forward_map(
+        #     Theta_mmse_scaled,
+        #     compute_derivatives=False,
+        #     compute_derivatives_2nd_order=False,
+        # )
+        # nll_utils = posterior.likelihood.evaluate_all_nll_utils(
+        #     forward_map_evals,
+        #     compute_derivatives=False,
+        #     compute_derivatives_2nd_order=False,
+        # )
+        current = {'theta': {'var': Theta_mmse_scaled}}
         objective_mmse = posterior.neglog_pdf(
-            Theta_mmse_scaled, forward_map_evals, nll_utils
+            current, update_nlpdf_utils=True
         )
 
         perf_saver.save_estimator_performance(
