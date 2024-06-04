@@ -1,10 +1,14 @@
 import abc
 from sys import byteorder
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 
-from beetroots.modelling.target_distribution.posterior import Posterior
+
+from beetroots.modelling.target_distribution.posterior import Posterior # FIXME: remove this import. replace by target_distribution
+
+from beetroots.modelling.target_distribution.abstract_target_distribution import TargetDistribution
+from beetroots.modelling.priors.smooth_indicator_prior import SmoothIndicatorPrior
 from beetroots.sampler.saver.abstract_saver import Saver
 from beetroots.sampler.utils.mml import EBayesMMLE
 
@@ -82,7 +86,7 @@ class Sampler(abc.ABC):
         inc_bytes : bytes
             inc to be set
         """
-        # step 1 : convert bytes to int
+        # step 1 : convert bytes to intPosterior
         loaded_state = int.from_bytes(state_bytes, byteorder)
         loaded_inc = int.from_bytes(inc_bytes, byteorder)
 
@@ -92,7 +96,7 @@ class Sampler(abc.ABC):
         state["state"]["inc"] = loaded_inc
         self.rng.__setstate__(state)
 
-    def generate_random_start_Theta(self, posterior: Posterior):
+    def generate_random_start_Var(self, target_distribution: TargetDistribution):
         r"""generates a random element of the hypercube defined by the lower and upper bounds with uniform distribution
 
         Parameters
@@ -102,21 +106,28 @@ class Sampler(abc.ABC):
 
         Returns
         -------
-        Theta : np.array of shape (N, D)
+        Var : np.array of shape (N, D)
             random element of the hypercube defined by the lower and upper bounds with uniform distribution
         """
-        if posterior.prior_indicator is not None:
-            Theta = (
-                self.rng.uniform(0, 1, size=(posterior.N, posterior.D))
+        has_indicator = False
+        prior_indicator = None
+        for component_distribution in target_distribution.distribution_components:
+            if isinstance(component_distribution, SmoothIndicatorPrior):
+                has_indicator = True
+                prior_indicator = component_distribution
+
+        if has_indicator:
+            Var = (
+                self.rng.uniform(0, 1, size=target_distribution.var_shape)
                 * (
-                    posterior.prior_indicator.upper_bounds[None, :]
-                    - posterior.prior_indicator.lower_bounds[None, :]
+                    prior_indicator.upper_bounds[None, :]
+                    - prior_indicator.lower_bounds[None, :]
                 )
-                + posterior.prior_indicator.lower_bounds[None, :]
+                + prior_indicator.lower_bounds[None, :]
             )
 
         else:
-            Theta = self.rng.standard_normal(size=(posterior.N, posterior.D))
+            Theta = self.rng.standard_normal(size=target_distribution.var_shape)
 
         return Theta
 
@@ -145,7 +156,7 @@ class Sampler(abc.ABC):
     @abc.abstractmethod
     def sample(
         self,
-        posterior: Posterior,
+        target_distributions: Union[TargetDistribution, dict[str, TargetDistribution]],
         saver: Saver,
         max_iter: int,
         Theta_0: Optional[np.ndarray],

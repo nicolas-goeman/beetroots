@@ -36,64 +36,64 @@ class HierarchicalSaver(Saver):
         self.final_next_batch_size = self.next_batch_size
 
         for key in current.keys():
-            self.memory[key] = np.zeros((self.final_next_batch_size, *vars[key].shape))
+            self.memory[key] = xp.zeros((self.final_next_batch_size, *vars[key].shape))
 
             if self.save_forward_map_evals:
                 for k, v in forward_map_evals.items():
-                    if np.all(["grad" not in k, "hess_diag" not in k]):
-                        self.memory[f"list_{k}"] = np.zeros(
+                    if xp.all(["grad" not in k, "hess_diag" not in k]):
+                        self.memory[f"list_{k}"] = xp.zeros(
                             (self.final_next_batch_size,) + v.shape
                         )
 
                 for k, v in forward_map_evals_u.items():
-                    if np.all(["grad" not in k, "hess_diag" not in k]):
-                        self.memory[f"list_u_{k}"] = np.zeros(
+                    if xp.all(["grad" not in k, "hess_diag" not in k]):
+                        self.memory[f"list_u_{k}"] = xp.zeros(
                             (self.final_next_batch_size,) + v.shape
                         )
 
             for k, v in nll_utils.items():
-                if np.all(["nll_" not in k, "grad" not in k, "hess_diag" not in k]):
-                    self.memory[f"list_{k}"] = np.zeros(
+                if xp.all(["nll_" not in k, "grad" not in k, "hess_diag" not in k]):
+                    self.memory[f"list_{k}"] = xp.zeros(
                         (self.final_next_batch_size,) + v.shape
                     )
 
             for k, v in nll_utils_u.items():
-                if np.all(["nll_" not in k, "grad" not in k, "hess_diag" not in k]):
-                    self.memory[f"list_u_{k}"] = np.zeros(
+                if xp.all(["nll_" not in k, "grad" not in k, "hess_diag" not in k]):
+                    self.memory[f"list_u_{k}"] = xp.zeros(
                         (self.final_next_batch_size,) + v.shape
                     )
 
             for k, v in dict_objective.items():
-                self.memory[f"list_{k}"] = np.zeros((self.final_next_batch_size,) + v.shape)
+                self.memory[f"list_{k}"] = xp.zeros((self.final_next_batch_size,) + v.shape)
 
             for k, v in dict_objective_u.items():
-                self.memory[f"list_u_{k}"] = np.zeros(
+                self.memory[f"list_u_{k}"] = xp.zeros(
                     (self.final_next_batch_size,) + v.shape
                 )
 
             for k, v in additional_sampling_log.items():
-                if isinstance(v, np.ndarray):
-                    self.memory[f"list_{k}"] = np.zeros(
+                if isinstance(v, xp.ndarray):
+                    self.memory[f"list_{k}"] = xp.zeros(
                         (self.final_next_batch_size,) + v.shape
                     )
                 else:
-                    self.memory[f"list_{k}"] = np.zeros((self.final_next_batch_size,))
+                    self.memory[f"list_{k}"] = xp.zeros((self.final_next_batch_size,))
 
             for k, v in additional_sampling_log_u.items():
-                if isinstance(v, np.ndarray):
-                    self.memory[f"list_u_{k}"] = np.zeros(
+                if isinstance(v, xp.ndarray):
+                    self.memory[f"list_u_{k}"] = xp.zeros(
                         (self.final_next_batch_size,) + v.shape
                     )
                 else:
-                    self.memory[f"list_u_{k}"] = np.zeros((self.final_next_batch_size,))
+                    self.memory[f"list_u_{k}"] = xp.zeros((self.final_next_batch_size,))
 
-            self.memory["list_rng_state"] = np.zeros(
+            self.memory["list_rng_state"] = xp.zeros(
                 (self.final_next_batch_size, 32),
-                dtype=np.uint8,
+                dtype=xp.uint8,
             )
-            self.memory["list_rng_inc"] = np.zeros(
+            self.memory["list_rng_inc"] = xp.zeros(
                 (self.final_next_batch_size, 32),
-                dtype=np.uint8,
+                dtype=xp.uint8,
             )
 
     def update_memory(
@@ -115,19 +115,19 @@ class HierarchicalSaver(Saver):
 
         if self.save_forward_map_evals:
             for k, v in forward_map_evals.items():
-                if np.all(["grad" not in k, "hess_diag" not in k]):
+                if xp.all(["grad" not in k, "hess_diag" not in k]):
                     self.memory[f"list_{k}"][t_save] = v
 
             for k, v in forward_map_evals_u.items():
-                if np.all(["grad" not in k, "hess_diag" not in k]):
+                if xp.all(["grad" not in k, "hess_diag" not in k]):
                     self.memory[f"list_{k}"][t_save] = v
 
         for k, v in nll_utils.items():
-            if np.all(["nll_" not in k, "grad" not in k, "hess_diag" not in k]):
+            if xp.all(["nll_" not in k, "grad" not in k, "hess_diag" not in k]):
                 self.memory[f"list_{k}"][t_save] = v
 
         for k, v in nll_utils_u.items():
-            if np.all(["nll_" not in k, "grad" not in k, "hess_diag" not in k]):
+            if xp.all(["nll_" not in k, "grad" not in k, "hess_diag" not in k]):
                 self.memory[f"list_u_{k}"][t_save] = v
 
         for k, v in dict_objective.items():

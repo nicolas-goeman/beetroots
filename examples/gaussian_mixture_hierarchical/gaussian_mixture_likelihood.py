@@ -59,6 +59,7 @@ class GaussianMixtureLikelihood(Likelihood):
         list_means: xp.ndarray,
         list_cov: xp.ndarray,
         var_name: str,
+        vars_involved: Union[tuple[str], list[str]],
     ) -> None:
         """Constructor of the MixingGaussianLikelihood object.
 
@@ -85,7 +86,7 @@ class GaussianMixtureLikelihood(Likelihood):
         L = D * 1  # make sure that theta space and y space are equal
         N = 1  # force only "one pixel"
         y = xp.zeros((N, L))
-        super().__init__(forward_map, D, L, N, y, var_name)
+        super().__init__(forward_map, D, L, N, y, var_name, vars_involved)
 
         assert isinstance(list_means, xp.ndarray)
         assert list_means.shape[1] == self.D
@@ -101,33 +102,56 @@ class GaussianMixtureLikelihood(Likelihood):
         pixelwise: bool = False,
         full: bool = False,
     ) -> Union[float, xp.ndarray]:
-        
-        N_pix = self.nlpdf_utils['N_pix']
 
         nlpdf = -xp.log(
             xp.sum(
                 [
                     [
-                        u_i(f_Var, mu, self.list_cov_inv[i])
+                        u_i(f_Theta, mu, self.list_cov_inv[i])
                         for i, mu in enumerate(self.list_means)
                     ]
-                    for f_Var in self.forward_map_evals["f_Var"]
+                    for f_Theta in self.forward_map_evals["f_Var"]
                 ],
                 axis=1,
             )
         )
-        msg = f"should be ({N_pix},), is {nlpdf.shape}"
-        assert nlpdf.shape == (N_pix,), msg
-
-        if self.nlpdf_utils['k_mtm'] > 0:
-            nlpdf = nlpdf.reshape((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'],))
+        msg = f"should be ({self.nlpdf_utils['N_pix']},), is {nlpdf.shape}"
+        assert nlpdf.shape == (self.nlpdf_utils['N_pix'],), msg
 
         if pixelwise:
-            return nlpdf  # (n_pix,) or (n_pix, k_mtm)
+            pass  # (self.nlpdf_utils['N_pix'],)
         if full:
-            return 1 / self.D * xp.ones((*nlpdf.shape, self.L)) * nlpdf[..., None]  # (N_pix, L)
+            nlpdf = 1 / self.L * xp.ones((self.nlpdf_utils['N_pix'], self.L)) * nlpdf[:, None]  # (self.nlpdf_utils['N_pix'], L)
+        if self.nlpdf_utils['mtm']:
+            nlpdf = nlpdf.reshape((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], *nlpdf.shape[1:]))
+        
+        if full or pixelwise:
+            return nlpdf
+        
+        return xp.sum(nlpdf) if not self.nlpdf_utils['mtm'] else nlpdf.swapaxes(0,1).sum(axis=tuple(range(1, nlpdf.ndim)))
+    
+        # nlpdf = -xp.log(
+        #         [
+        #             [
+        #                 u_i(f_Var, mu, self.list_cov_inv[i])
+        #                 for i, mu in enumerate(self.list_means)
+        #             ]
+        #             for f_Var in self.forward_map_evals["f_Var"]
+        #         ],
+        #     )  # (N_pix, L)
+        
+        # if full:
+        #     pass
+        # if pixelwise:
+        #     nlpdf = xp.sum(nlpdf, axis=tuple(range(1, nlpdf.ndim)))  # (N_pix,)
+        
+        # if self.nlpdf_utils['mtm']:
+        #     nlpdf = nlpdf.reshape((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], *nlpdf.shape[1:]))
 
-        return xp.sum(nlpdf)  # float
+        # if full or pixelwise:
+        #     return nlpdf
+        
+        # return xp.sum(nlpdf) if self.nlpdf_utils['mtm'] else nlpdf.swapaxes(0,1).sum(axis=tuple(range(1, nlpdf.ndim)))
 
     def gradient_neglog_pdf(
         self,
@@ -153,15 +177,24 @@ class GaussianMixtureLikelihood(Likelihood):
             ],
             axis=1,
         )  # (N_pix, D) = (1, 2)
-
+        
         grad_ = -1 / u * sum_grad_u_i  # (N_pix, D) = (1, 2)
         # print(u.shape, sum_grad_u_i.shape, grad_.shape)
 
-        assert grad_.shape == (
-            self.N,
-            self.D,
-        ), f"has shape {grad_.shape}, should have ({self.N}, {self.D})"
-        return grad_  # (N, D)
+        if self.nlpdf_utils['mtm']:
+            grad_ = grad_.reshape((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], *grad_.shape[1:]))
+            assert grad_.shape == (
+                self.nlpdf_utils['n_pix'],
+                self.nlpdf_utils['k_mtm'],
+                self.D,
+            ), f"has shape {grad_.shape}, should have ({self.nlpdf_utils['n_pix']}, {self.nlpdf_utils['k_mtm']}, {self.D})"
+        else:
+            assert grad_.shape == (
+                self.N,
+                self.D,
+            ), f"has shape {grad_.shape}, should have ({self.nlpdf_utils['n_pix']}, {self.D})"
+        
+        return grad_  # (n_pix, D) or (n_pix, k_mtm, D)
 
     def hess_diag_neglog_pdf(
         self,
@@ -205,7 +238,18 @@ class GaussianMixtureLikelihood(Likelihood):
             * (u * xp.log(sum_hess_diag_u_i) - sum_grad_u_i**2 * xp.log(sum_grad_u_i))
         )
         # print(sum_grad_u_i.shape, sum_hess_diag_u_i.shape, hess_diag.shape)
-        assert hess_diag.shape == (1, 2)
+        if self.nlpdf_utils['mtm']:
+            hess_diag = hess_diag.reshape((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], *hess_diag.shape[1:]))
+            assert hess_diag.shape == (
+                self.nlpdf_utils['n_pix'],
+                self.nlpdf_utils['k_mtm'],
+                self.D,
+            ), f"has shape {hess_diag.shape}, should have ({self.nlpdf_utils['n_pix']}, {self.nlpdf_utils['k_mtm']}, {self.D})"
+        else:
+            assert hess_diag.shape == (
+                self.N,
+                self.D,
+            ), f"has shape {hess_diag.shape}, should have ({self.nlpdf_utils['n_pix']}, {self.D})"
         return hess_diag  # (N, D)
 
     def evaluate_all_nlpdf_utils(
@@ -230,11 +274,15 @@ class GaussianMixtureLikelihood(Likelihood):
         self.evaluate_all_forward_map(forward_var_inputs, compute_derivatives=compute_derivatives, compute_derivatives_2nd_order=compute_derivatives_2nd_order) # TODO: put variable and other required arguments here
 
         n_pix = idx_pix.size if idx_pix is not None else self.N *1
-        k_mtm = shape_var.shape[1] if mtm else 0
+        k_mtm = shape_var[1] if mtm else 0
         if n_pix == self.N:
             idx_pix = xp.arange(self.N)
         N_pix = self.forward_map_evals["f_Var"].shape[0]
-        assert n_pix * k_mtm == N_pix
+        
+        if mtm:
+            assert n_pix * k_mtm == N_pix
+        else:
+            assert n_pix == N_pix
 
         self.nlpdf_utils['n_pix'] = n_pix
         self.nlpdf_utils['N_pix'] = N_pix

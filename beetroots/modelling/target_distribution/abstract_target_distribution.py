@@ -41,11 +41,15 @@ class TargetDistribution(ABC):
         self.distribution_components = distribution_components
         """dict: dict of all distributions that compose the target distribution"""
 
-        self.vars_involved = list(distribution_components.keys())
-        """list: list of all variable names involved in the target distribution"""
 
-        self_var_name = var_name
+        self.var_name = var_name
         """str: name of the variable of the target distribution"""
+
+        self.vars_involved = []
+        for cd in self.distribution_components.values():
+            self.vars_involved += list(cd.vars_involved)
+        self.vars_involved = set(self.vars_involved)
+        """list: list of all variable names involved in the target distribution"""
 
         if separable is True: # all terms are independent (separable)
             self.dict_sites = {0: xp.arange(self.N)}

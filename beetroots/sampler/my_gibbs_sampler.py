@@ -11,6 +11,7 @@ except ImportError:
 from scipy.special import softmax
 from tqdm.auto import tqdm
 
+from beetroots.modelling.likelihoods.abstract_likelihood import Likelihood
 from beetroots.modelling.target_distribution.abstract_target_distribution import TargetDistribution
 from beetroots.sampler.abstract_sampler import Sampler
 from beetroots.sampler.saver.hierarchical_saver import HierarchicalSaver
@@ -110,12 +111,60 @@ class MyGibbsSampler(Sampler):
         r"""dict: contains the number of iterations since last acceptance for each target distribution"""
 
 
-
-
+    # TODO: implement the model checking for the hierarchical approach and remove this old version.
     def _update_model_check_values(
         self,
+        dict_model_check: dict,
+        likelihood: Likelihood,
+        nll_full: xp.ndarray,
+        objective: float,
     ) -> dict:
-        raise NotImplementedError
+        count_pval = dict_model_check["count_pval"] * 1
+        y_copy = likelihood.y * 1
+
+        if self.stochastic:
+            dict_model_check["clppd_online"] *= count_pval / (count_pval + 1)
+            dict_model_check["clppd_online"] += xp.exp(-nll_full) / (count_pval + 1)
+
+            y_rep = likelihood.sample_observation_model(
+                self.rng,
+            )
+            likelihood_rep = copy.deepcopy(likelihood)
+            likelihood_rep.y = y_rep * 1
+
+            assert xp.allclose(likelihood.y, y_copy), "nooooo"
+
+            likelihood_rep.evaluate_all_nlpdf_utils(
+                self.current,
+                idx_pix=None,
+                compute_derivatives=False,
+            )
+            nll_y_rep_full = likelihood_rep.neglog_pdf(
+                full=True,
+            )
+
+            # p-value per (N, L) with y_rep_{n,ell} <= y_{n,ell}
+            dict_model_check["p_values_y"] *= count_pval / (count_pval + 1)
+            dict_model_check["p_values_y"] += (y_rep <= likelihood.y) / (count_pval + 1)
+
+            # p-value per (N,) with
+            # p(y_rep_n \vert theta_n) <= p(y_n \vert theta_n)
+            nll_y = xp.sum(nll_full, axis=1)  # (N,)
+            nll_y_rep = xp.sum(nll_y_rep_full, axis=1)  # (N,)
+
+            dict_model_check["p_values_llh"] *= count_pval / (count_pval + 1)
+            dict_model_check["p_values_llh"] += (nll_y_rep >= nll_y) / (count_pval + 1)
+
+            dict_model_check["count_pval"] += 1
+
+        else:
+            if objective < dict_model_check["best_objective"]:
+                dict_model_check["best_objective"] = objective * 1
+                dict_model_check["clppd_online"] = xp.exp(-nll_full)
+
+            # p-values are computed at the end of the optimisation process.
+
+        return dict_model_check
 
     def _finalize_model_check_values(
         self,
@@ -201,23 +250,27 @@ class MyGibbsSampler(Sampler):
         """
         var_names = list(target_distributions.keys())
 
-        assert len(target_distributions) == len(Vars_0), "Vars_0 should have the same number of variables as target_distributions. If no initial value is provided for a variable it should be set to None in the Vars_0 dict."
-        assert set(target_distributions.keys()) == set(Vars_0.keys()), "Vars_0 should have the same variable names (keys of dict) as target_distributions"
-        
-        for key in var_names.keys():
+        # FIXME: temporary solution for Vars_0. We should have a dict with MAP, MLE or None for each variable.
+        # assert len(target_distributions) == len(Vars_0), "Vars_0 should have the same number of variables as target_distributions. If no initial value is provided for a variable it should be set to None in the Vars_0 dict."
+        # assert set(target_distributions.keys()) == set(Vars_0.keys()), "Vars_0 should have the same variable names (keys of dict) as target_distributions"
+        Vars_0 = {key: None for key in var_names}
+        self.current = {key: dict() for key in var_names}
+        for key in var_names:
             if Vars_0[key] is None:
-                Vars_0[key] = target_distributions[key].generate_random_start_var()  # (N, D)
+                self.current[key]["var"] = self.generate_random_start_Var(target_distributions[key])  # (N, D)
 
-        assert None not in Vars_0.values(), "Vars_0 should not contain None values after generating random start values"
+        for current_var_dict in self.current.values():
+            assert None not in current_var_dict['var'], "Vars_0 should not contain None values after generating random start values"
         
         # TODO: change the following to check shape of initial values
         # assert Theta_0.shape == (self.N, self.D)
 
         additional_sampling_log = {}
         dict_objective = {}
+        nll_full = {} #TODO and #FIXME: remove in the final Gibbs sampler. Still need to find a way for the model checking.
         for key in var_names:
             self.current[key] = target_distributions[key].compute_all(
-                Vars_0[key], compute_derivatives_2nd_order=self.compute_derivatives_2nd_order
+                self.current, compute_derivatives_2nd_order=self.compute_derivatives_2nd_order
             )
             assert xp.isnan(self.current[key]["objective"]) == 0
             assert xp.sum(xp.isnan(self.current[key]["grad"])) == 0
@@ -228,8 +281,9 @@ class MyGibbsSampler(Sampler):
             
             # Initialize the j_t variable used in the correction term of the PMALA kernel. It represents the number of iterates since last acceptance.
             self.j_t[key] = xp.zeros(target_distributions[key].var_shape)
-            additional_sampling_log[key] = {}
-            dict_objective[key] = {} 
+            additional_sampling_log[key] = dict()
+            dict_objective[key] = dict() 
+            nll_full[key] = dict()
 
         rng_state_array, _ = self.get_rng_state()
 
@@ -280,32 +334,33 @@ class MyGibbsSampler(Sampler):
             # --- RANDOM CHOICE PMALA / MTM ---
             acceptance_stats = {}
             for key in var_names:
-                kernel_choice = self.rng.random()
-                if kernel_choice < self.selection_probas[key][0]:
+                type_t = self.rng.random()
+                if type_t < self.selection_probas[key][0]:
                     (
                         accepted_t,
                         log_proba_accept_t,
                     ) = self.generate_new_sample_mtm(t, key, target_distributions[key])
-                    acceptance_stats[key] = {"accepted": accepted_t, "log_proba_accept": log_proba_accept_t, "kernel_choice": "mtm"}
+                    acceptance_stats[key] = {"accepted_t": accepted_t, "log_proba_accept_t": log_proba_accept_t, "type_t": 0} # kernel choice 0 = MTM
                 else:
-                    assert kernel_choice > self.selection_probas[key][0]
+                    assert type_t > self.selection_probas[key][0]
                     (
                         accepted_t,
                         log_proba_accept_t,
                     ) = self.generate_new_sample_pmala_rmsprop(t, key, target_distributions[key])
-                    acceptance_stats[key] = {"accepted": accepted_t, "log_proba_accept": log_proba_accept_t, "kernel_choice": "pmala"}
+                    acceptance_stats[key] = {"accepted_t": accepted_t, "log_proba_accept_t": log_proba_accept_t, "type_t": 1} # kernel choice 1 = PMALA
 
 
             # * if the memory is empty : initialize it
+            # TODO: update this part for the Gibbs sampler. dict_objective is not correct here (only last variable). Should change the saver.
             if saver.memory == {}:
                 for key in var_names:
                     additional_sampling_log[key]["v"] = self.v[key].reshape(self.current[key]["grad"].shape) * 1
-                    additional_sampling_log[key]["kernel_choice"] = acceptance_stats[key]["kernel_choice"]
+                    additional_sampling_log[key]["type_t"] = acceptance_stats[key]["type_t"]
                     additional_sampling_log[key]["accepted_t"] = acceptance_stats[key]["accepted_t"]
                     additional_sampling_log[key]["log_proba_accept_t"] = acceptance_stats[key]["log_proba_accept_t"]
 
-                    dict_objective = target_distributions[key].compute_all_for_saver(
-                        self.current[key],
+                    dict_objective[key], nll_full[key] = target_distributions[key].compute_all_for_saver( # Update nll_full
+                        self.current,
                     )
 
                 # NOTE: the model_checking (as in the elif under) was also present here in the original code. I removed it from here since it will never be used in the fist iteration as the burn-in is not finished yet? Should I let it for the case where T_BI = 0?
@@ -313,18 +368,22 @@ class MyGibbsSampler(Sampler):
                 saver.initialize_memory(
                     max_iter,
                     t,
-                    current=self.current,
-                    dict_objective=dict_objective,
-                    additional_sampling_log=additional_sampling_log,
+                    Theta=self.current[key]['var'],
+                    forward_map_evals=target_distributions[key].likelihood.forward_map_evals,
+                    nll_utils=target_distributions[key].likelihood.nlpdf_utils,
+                    dict_objective=dict_objective[key],
+                    additional_sampling_log=additional_sampling_log[key],
                 )
 
                 rng_state_array, rng_inc_array = self.get_rng_state()
 
                 saver.update_memory(
                     t,
-                    current = self.current,
-                    dict_objective=dict_objective,
-                    additional_sampling_log=additional_sampling_log,
+                    Theta=self.current[key]['var'],
+                    forward_map_evals=target_distributions[key].likelihood.forward_map_evals,
+                    nll_utils=target_distributions[key].likelihood.nlpdf_utils,
+                    dict_objective=dict_objective[key],
+                    additional_sampling_log=additional_sampling_log[key],
                     rng_state_array=rng_state_array,
                     rng_inc_array=rng_inc_array,
                 )
@@ -332,25 +391,31 @@ class MyGibbsSampler(Sampler):
             elif saver.check_need_to_update_memory(t):
                 for key in var_names:
                     additional_sampling_log[key]["v"] = self.v[key].reshape(self.current[key]["grad"].shape) * 1
-                    additional_sampling_log[key]["kernel_choice"] = acceptance_stats[key]["kernel_choice"]
+                    additional_sampling_log[key]["type_t"] = acceptance_stats[key]["type_t"]
                     additional_sampling_log[key]["accepted_t"] = acceptance_stats[key]["accepted_t"]
                     additional_sampling_log[key]["log_proba_accept_t"] = acceptance_stats[key]["log_proba_accept_t"]
 
-                    dict_objective = target_distributions[key].compute_all_for_saver(
-                        self.current[key],
+                    dict_objective[key], nll_full[key] = target_distributions[key].compute_all_for_saver(
+                        self.current,
                     )
 
                 if t > T_BI:
-                    # TODO: implement the model checking for the hierarchical approach
-                    dict_model_check = self._update_model_check_values()
+                    # TODO: implement the model checking for the hierarchical approach and remove old version.
+                    dict_model_check = self._update_model_check_values(
+                        dict_model_check,
+                        target_distributions[key].likelihood,
+                        nll_full[key],
+                        dict_objective[key]["objective"] * 1,)
 
                 rng_state_array, rng_inc_array = self.get_rng_state()
 
                 saver.update_memory(
                     t,
-                    current=self.current,
-                    dict_objective=dict_objective,
-                    additional_sampling_log=additional_sampling_log,
+                    Theta=self.current[key]['var'],
+                    forward_map_evals=target_distributions[key].likelihood.forward_map_evals,
+                    nll_utils=target_distributions[key].likelihood.nlpdf_utils,
+                    dict_objective=dict_objective[key],
+                    additional_sampling_log=additional_sampling_log[key],
                     rng_state_array=rng_state_array,
                     rng_inc_array=rng_inc_array,
                 )
@@ -428,7 +493,7 @@ class MyGibbsSampler(Sampler):
             v_current = self.v[key].reshape(new_var.shape)[idx_pix, :] * 1
 
             # generate random
-            diag_G_t = 1 / (self.lambda_ + xp.sqrt(v_current))  # (n_pix, D)
+            diag_G_t = 1 / (self.lambda_[key] + xp.sqrt(v_current))  # (n_pix, D) # TODO: check if lambda_ is something that evolves with time
 
             assert xp.all(
                 diag_G_t > 0
@@ -436,7 +501,7 @@ class MyGibbsSampler(Sampler):
 
             size_var_sites = (n_pix, new_var.shape[1]) # Shape of the variable to sample restricted to the current sites for the first dimension.
             z_t = self.rng.standard_normal(size=size_var_sites)
-            z_t *= xp.sqrt(self.eps0 * diag_G_t)  # (n_pix, D)
+            z_t *= xp.sqrt(self.eps0[key] * diag_G_t)  # (n_pix, D)
 
             # bias correction term
             if self.compute_correction_term:
@@ -444,8 +509,8 @@ class MyGibbsSampler(Sampler):
                 j_t = self.j_t[key].reshape(new_var.shape)[idx_pix, :] * 1
 
                 correction = (
-                    -(1 - self.alpha)
-                    * self.alpha**j_t
+                    -(1 - self.alpha[key])
+                    * self.alpha[key]**j_t
                     * (diag_G_t**2)
                     / xp.sqrt(v_current)
                     * grad_t
@@ -462,17 +527,17 @@ class MyGibbsSampler(Sampler):
             # combination
             mu_current = (
                 new_var[idx_pix, :]
-                - self.eps0 / 2 * diag_G_t * grad_t
-                + self.eps0 * correction
+                - self.eps0[key] / 2 * diag_G_t * grad_t
+                + self.eps0[key] * correction
             )  # (n_pix, D)
 
-            candidate = mu_current + z_t  # (n_pix, D), simulates Gaussian with mean mu_current and std dev sqrt(eps0 * diag_G_t). It is the PMALA proposal (Langevin step)
+            candidate = mu_current + z_t  # (n_pix, D), simulates Gaussian with mean mu_current and std dev sqrt(eps0[key] * diag_G_t). It is the PMALA proposal (Langevin step)
 
             # --- ACCEPT/REJECT STEP ---
             # * compute log_q of candidate given current
             log_q_candidate_given_current = -1 / 2 * xp.sum(
                 xp.log(diag_G_t), axis=1
-            ) - 1 / (2 * self.eps0) * xp.sum(
+            ) - 1 / (2 * self.eps0[key]) * xp.sum(
                 (candidate - mu_current) ** 2 / diag_G_t, axis=1
             )  # (n_pix,)
 
@@ -484,24 +549,24 @@ class MyGibbsSampler(Sampler):
             candidate_full[idx_pix, :] = mu_current * 1
 
             current_candidate[key] = {'var': candidate_full}
-            target_distribution.evaluate_all_nlpdf_utils(current_candidate, idx_pix, compute_derivatives=True, compute_derivatives_2nd_order=True)
+            target_distribution.update_nlpdf_utils(current_candidate, idx_pix, compute_derivatives=True, compute_derivatives_2nd_order=True)
             candidate_all = {}
-            nlpdf = target_distribution.neglog_pdf(pixelwise=True, update_nlpdf_utils=False)
+            nlpdf = target_distribution.neglog_pdf(full=True, update_nlpdf_utils=False)
             candidate_all['objective_pix'] = nlpdf.sum(axis=tuple(range(1, nlpdf.ndim))) # (n_pix,)
             candidate_all['grad'] = target_distribution.grad_neglog_pdf(update_nlpdf_utils=False) # (N, D)
             candidate_all['hess_diag'] = target_distribution.hess_diag_neglog_pdf(update_nlpdf_utils=False) # (N, D)
 
             grad_cand = candidate_all["grad"] * 1
             v_cand = (
-                self.alpha * v_current + (1 - self.alpha) * grad_cand**2
+                self.alpha[key] * v_current + (1 - self.alpha[key]) * grad_cand**2
             )  # (n_pix, D)
-            diag_G_cand = 1 / (self.lambda_ + xp.sqrt(v_cand))  # (n_pix, D)
+            diag_G_cand = 1 / (self.lambda_[key] + xp.sqrt(v_cand))  # (n_pix, D)
 
             if self.compute_correction_term:
                 hess_diag_cand = candidate_all["hess_diag"] * 1
 
                 correction_cand = -(
-                    (1 - self.alpha)
+                    (1 - self.alpha[key])
                     * diag_G_cand**2
                     / (2*xp.sqrt(v_cand)) # NOTE: the factor 2 was missing in the initial approach. To be confirmed.
                     * grad_cand
@@ -512,13 +577,13 @@ class MyGibbsSampler(Sampler):
 
             mu_cand = (
                 candidate
-                - self.eps0 / 2 * diag_G_cand * grad_cand
-                + self.eps0 * correction_cand
+                - self.eps0[key] / 2 * diag_G_cand * grad_cand
+                + self.eps0[key] * correction_cand
             )  # (n_pix, D)
 
             log_q_current_given_candidate = -1 / 2 * xp.sum(
                 xp.log(diag_G_cand), axis=1
-            ) - 1 / (2 * self.eps0) * xp.sum(
+            ) - 1 / (2 * self.eps0[key]) * xp.sum(
                 (new_var[idx_pix, :] - mu_cand) ** 2 / diag_G_cand, axis=1
             )  # (n_pix,)
 
@@ -555,9 +620,9 @@ class MyGibbsSampler(Sampler):
             log_proba_accept_total[idx_pix] = log_proba_accept * 1
 
             # update v and j
-            v = self.v.reshape(new_var.shape) * 1
+            v = self.v[key].reshape(new_var.shape) * 1
             v[idx_pix, :] = v_cand * 1
-            self.v = v.flatten()
+            self.v[key] = v.flatten()
 
             j = self.j_t[key].reshape(new_var.shape) * 1
             j[idx_pix, :] = xp.where(
@@ -609,7 +674,7 @@ class MyGibbsSampler(Sampler):
         current_candidates = {var_name: dict() for var_name in names_vars_involved}
         for var_name in names_vars_involved:
             if var_name != key:
-                current_candidates[var_name] = {'var': xp.repeat(self.current[var_name]["var"][:, xp.newaxis, :], self.k_mtm + 1, axis=1)} # Add a dimension for the candidates.                
+                current_candidates[var_name] = {'var': xp.repeat(self.current[var_name]["var"][:, xp.newaxis, :], self.k_mtm[key] + 1, axis=1)} # Add a dimension for the candidates.                
 
         # * define proba of changing each pixel
         # * either uniformly or depending on their respective nll
@@ -626,9 +691,9 @@ class MyGibbsSampler(Sampler):
 
             # * generate and evaluate candidates
             candidates = new_var * 1
-            candidates = candidates.reshape((new_var.shape[0], 1, *new_var.shape[1:])).repeat(self.k_mtm + 1, axis=1)  # (N, k_mtm, ...)
+            candidates = candidates.reshape((new_var.shape[0], 1, *new_var.shape[1:])).repeat(self.k_mtm[key] + 1, axis=1)  # (N, k_mtm, ...)
             candidates[idx_pix, :-1, ...] = self.proposal_distribution_mtm[key].sample(
-                new_var, idx_pix
+                new_var, idx_pix, self.k_mtm[key]
             )
 
             # --- COMPUTE WEIGHTS (USING LOG)
@@ -636,8 +701,9 @@ class MyGibbsSampler(Sampler):
             current_candidates[key] = {'var': candidates}
             
             target_distribution.update_nlpdf_utils(current_candidates, idx_pix, compute_derivatives=False, compute_derivatives_2nd_order=False, mtm=True) # TODO: add the possibility to pass the idx_pix to the neglog_pdf method, improves the performance.
-            neglogpdf_candidates = target_distribution.neglog_pdf(pixelwise=True) # TODO: check if the shape corresponds to the expected one # We don't call the nlpdf_utils here but above since we want to add the mtm=True argument to the update_nlpdf_utils method.
-            assert neglogpdf_candidates.shape == (n_pix, self.k_mtm + 1,)
+            neglogpdf_candidates = target_distribution.neglog_pdf(full=True, update_nlpdf_utils=False) # TODO: check if the shape corresponds to the expected one # We don't call the nlpdf_utils here but above since we want to add the mtm=True argument to the update_nlpdf_utils method.
+            neglogpdf_candidates = neglogpdf_candidates.sum(axis=tuple(range(2, neglogpdf_candidates.ndim)))
+            assert neglogpdf_candidates.shape == (n_pix, self.k_mtm[key] + 1,)
 
             # candidates_pix = candidates_pix.reshape((n_pix, self.k_mtm + 1, self.D))
             # assert xp.allclose(candidates_pix[:, -1, :], self.current["Theta"][idx_pix, :]) -> validated
@@ -645,7 +711,7 @@ class MyGibbsSampler(Sampler):
             neglogpdf_proposal_candidates = self.proposal_distribution_mtm[key].neglog_pdf(candidates, idx_pix)
 
             shape_ = neglogpdf_proposal_candidates.shape
-            assert shape_ == (n_pix, self.k_mtm + 1)
+            assert shape_ == (n_pix, self.k_mtm[key] + 1)
 
             neglogpdf_candidates -= neglogpdf_proposal_candidates # FIXME: originally it was a + instead of the minus but the proposal is in the demoninator in the weight ratio. Check if it is correct.
 
@@ -671,7 +737,7 @@ class MyGibbsSampler(Sampler):
             idx_challengers = xp.zeros((n_pix,), dtype=int)
             for i in range(n_pix):
                 idx_challengers[i] = self.rng.choice(
-                    self.k_mtm,
+                    self.k_mtm[key],
                     p=weights[i],
                 )
 
@@ -737,7 +803,7 @@ class MyGibbsSampler(Sampler):
             new_v = self.v[key].reshape(new_var.shape) * 1
             new_v = xp.where(
                 accept_total[:, None],
-                self.alpha * new_v + (1 - self.alpha) * self.current[key]["grad"] ** 2,
+                self.alpha[key] * new_v + (1 - self.alpha[key]) * self.current[key]["grad"] ** 2,
                 new_v,
             )
             self.v[key] = new_v.flatten()

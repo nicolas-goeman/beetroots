@@ -146,8 +146,10 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
         lower_bounds: xp.ndarray,
         upper_bounds: xp.ndarray,
         list_idx_sampling: List[int],
+        var_name: str,
+        **kwargs
     ) -> None:
-        super().__init__(D, N)
+        super().__init__(D, N, var_name, **kwargs)
         self.indicator_margin_scale = indicator_margin_scale
         r"""float: scaling parameter :math:`\Delta`"""
 
@@ -198,7 +200,7 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
         if pixelwise:
             neglog_p = self.nlpdf_utils['nlpdf_full'].sum(axis=-1)  # (n_pix,) or (n_pix, k_mtm)
         else:
-            neglog_p = self.nlpdf_utils['nlpdf_full'].sum(axis=-1) # (D,) or (k_mtm, D)
+            neglog_p = self.nlpdf_utils['nlpdf_full'].sum(axis=0) # (D,) or (k_mtm, D)
         return neglog_p
 
     # def neglog_pdf_one_pix(self, Var: xp.ndarray) -> xp.ndarray:
@@ -244,7 +246,7 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
         """
         return self.nlpdf_utils['grad']  # / (self.N * self.D)
 
-    def hess_diag_neglog_pdf(self, Var: xp.ndarray) -> xp.ndarray:
+    def hess_diag_neglog_pdf(self,) -> xp.ndarray:
         r"""diagonal of the Hessian of the negative log pdf of the smooth indicator prior
 
         Parameters
@@ -272,7 +274,7 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
         assert Var.shape[-1]==self.D
 
         self.nlpdf_utils['mtm'] = mtm
-        self.nlpdf_utils['k_mtm'] = Var.shape[1] if mtm else 0
+        self.nlpdf_utils['k_mtm'] = original_var_shape[1] if mtm else 0
         self.nlpdf_utils['n_pix'] = idx_pix.size if idx_pix is not None else self.N
 
         self.nlpdf_utils['laplacian_local'] = penalty_one_pix(
@@ -285,25 +287,36 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
         if idx_pix is not None:
             Var = Var[idx_pix] * 1
         if mtm:
-            Var = Var.reshape(-1, *original_var_shape.shape[2:])
+            Var = Var.reshape(-1, *original_var_shape[2:])
 
         nlpdf_full = penalty_one_pix(Var, self.lower_bounds, self.upper_bounds, self.indicator_margin_scale)
+
         if mtm:
-            self.nlpdf_utils['nlpdf_full'] = nlpdf_full.reshape(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], original_var_shape.shape)
+            self.nlpdf_utils['nlpdf_full'] = nlpdf_full.reshape(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], *original_var_shape[2:])
+        else:
+            self.nlpdf_utils['nlpdf_full'] = nlpdf_full.reshape(self.nlpdf_utils['n_pix'], *original_var_shape[1:])
 
         if compute_derivatives:
-            self.nlpdf_utils['grad'] = gradient_penalty(
+            grad_ = gradient_penalty(
                 Var,
                 self.lower_bounds,
                 self.upper_bounds,
                 self.indicator_margin_scale,
-            ).reshape(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], original_var_shape.shape)
+            )
+            if mtm:
+                self.nlpdf_utils['grad'] = grad_.reshape(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], *original_var_shape[2:])
+            else:
+                self.nlpdf_utils['grad'] = grad_.reshape(self.nlpdf_utils['n_pix'], *original_var_shape[1:])
             if compute_derivatives_2nd_order:
-                self.nlpdf_utils['hess_diag'] = hess_diag_penalty(
+                hess_diag_ = hess_diag_penalty(
                     Var,
                     self.lower_bounds,
                     self.upper_bounds,
                     self.indicator_margin_scale,
-                ).reshape(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], original_var_shape.shape)
+                )
+                if mtm:
+                    self.nlpdf_utils['hess_diag'] = hess_diag_.reshape(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], *original_var_shape[2:])
+                else:
+                    self.nlpdf_utils['hess_diag'] = hess_diag_.reshape(self.nlpdf_utils['n_pix'], *original_var_shape[1:])
 
             

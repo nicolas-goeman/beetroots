@@ -21,6 +21,7 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
         "prior_spatial",
         "prior_indicator",
         "dict_sites",
+        "var_shape",
     )
 
     def __init__(
@@ -58,18 +59,19 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
         else:
             self.dict_sites = {n: xp.array([n]) for n in range(self.N)}
 
+        self.var_shape = (self.N, self.D)
+
         return
 
     def neglog_pdf_priors(
         self,
-        Theta: xp.ndarray,
-        idx_pix: Optional[xp.ndarray] = None,
         pixelwise: bool = False,
     ) -> Union[float, xp.ndarray]:
         if pixelwise:
-            nl_priors = xp.zeros((self.N, self.L))
+            size_ = self.likelihood.nlpdf_utils['n_pix']
+            nl_priors = xp.zeros((size_, self.L)) if not self.likelihood.nlpdf_utils['mtm'] else xp.zeros((size_, self.likelihood.nlpdf_utils['k_mtm'], self.L))
         else:
-            nl_priors = 0.0
+            nl_priors = 0.0 if not self.likelihood.nlpdf_utils['mtm'] else xp.zeros((self.likelihood.nlpdf_utils['k_mtm']))
 
         if self.prior_spatial is not None:
             nl_prior_spatial = self.prior_spatial.neglog_pdf(pixelwise=pixelwise)
@@ -77,14 +79,14 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
                 # nl_prior_spatial has shape (N, D), which needs to be
                 # converted to (N, L)
                 nl_prior_spatial = xp.sum(nl_prior_spatial, axis=1)  # (N,)
-                nl_priors += nl_prior_spatial[:, None]  # (N, L)
+                nl_priors += nl_prior_spatial[..., None]  # (N, L)
             else:
                 nl_priors += xp.sum(nl_prior_spatial)
 
         if self.prior_indicator is not None:
             nl_prior_ind = self.prior_indicator.neglog_pdf(pixelwise=pixelwise)
             if pixelwise:
-                nl_priors += nl_prior_ind[:, None]
+                nl_priors += nl_prior_ind[..., None]
             else:
                 nl_priors += xp.sum(nl_prior_ind)
 
@@ -94,7 +96,7 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
         self,
         current: dict[str, Union[dict, float, xp.ndarray]]=None,
         idx_pix: Optional[xp.ndarray] = None,
-        pixelwise: bool = False,
+        full: bool = False,
         update_nlpdf_utils: bool = True,
     ) -> float:
         if update_nlpdf_utils and current is None:
@@ -102,15 +104,15 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
         elif update_nlpdf_utils and current is not None:
             self.update_nlpdf_utils(current, idx_pix=idx_pix, compute_derivatives=False, compute_derivatives_2nd_order=False)
 
-        if pixelwise:
+        if full:
             size_ = self.N if idx_pix is None else idx_pix.size
-            out = xp.zeros((size_, self.L))
+            out = xp.zeros((size_, self.L)) if not self.likelihood.nlpdf_utils['mtm'] else xp.zeros((size_, self.likelihood.nlpdf_utils['k_mtm'], self.L))
         else:
-            out = 0.0
+            out = 0.0 if not self.likelihood.nlpdf_utils['mtm'] else xp.zeros((self.likelihood.nlpdf_utils['k_mtm']))
 
-        out += self.likelihood.neglog_pdf(pixelwise=pixelwise,) # NOTE: idx_pix not required because it is only required in the evaluate_all_nlpdf_utils method. It computes everything while taking care of nlpdf_utils.
+        out += self.likelihood.neglog_pdf(full=full,) # NOTE: idx_pix not required because it is only required in the evaluate_all_nlpdf_utils method. It computes everything while taking care of nlpdf_utils.
 
-        out += self.neglog_pdf_priors(pixelwise=pixelwise)
+        out += self.neglog_pdf_priors(pixelwise=full)
 
         # assert xp.sum(xp.isnan(nll)) == 0, xp.sum(xp.isnan(nll))
         # assert xp.sum(xp.isnan(nl_priors)) == 0, xp.sum(xp.isnan(nl_priors)) 
@@ -136,7 +138,7 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
             # assert (
             #     xp.sum(xp.isnan(grad_nl_prior_spatial)) == 0
             # ), f"nan grad prior spatial {xp.sum(xp.isnan(grad_nl_prior_spatial))}"
-            grad_ += self.prior_spatial.gradient_neglog_pdf(current_var=current[self.var_name]["var"])
+            grad_ += self.prior_spatial.gradient_neglog_pdf()
 
         if self.prior_indicator is not None:
             # grad_nl_prior_indicator = self.prior_indicator.gradient_neglog_pdf()
@@ -144,7 +146,7 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
             # assert (
             #     xp.sum(xp.isnan(grad_nl_prior_indicator)) == 0
             # ), f"nan grad prior indicator {xp.sum(xp.isnan(grad_nl_prior_indicator))}"
-            grad_ += self.prior_indicator.gradient_neglog_pdf(current_var=current[self.var_name]["var"])
+            grad_ += self.prior_indicator.gradient_neglog_pdf()
 
         grad_ = xp.nan_to_num(grad_)
         return grad_
@@ -167,13 +169,13 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
             # hess_diag_nl_prior_spatial = self.prior_spatial.hess_diag_neglog_pdf()
             # assert xp.sum(xp.isnan(hess_diag_nl_prior_spatial)) == 0
             # assert hess_diag_nl_prior_spatial.shape == (self.N, self.D)
-            hess_diag += self.prior_spatial.hess_diag_neglog_pdf(current_var=current[self.var_name]["var"])
+            hess_diag += self.prior_spatial.hess_diag_neglog_pdf()
 
         if self.prior_indicator is not None:
             # hess_diag_nl_prior_indicator = self.prior_indicator.hess_diag_neglog_pdf()
             # assert xp.sum(xp.isnan(hess_diag_nl_prior_indicator)) == 0
             # assert hess_diag_nl_prior_indicator.shape == (self.N, self.D)
-            hess_diag += self.prior_indicator.hess_diag_neglog_pdf(current_var=current[self.var_name]["var"])
+            hess_diag += self.prior_indicator.hess_diag_neglog_pdf()
 
         hess_diag = xp.nan_to_num(hess_diag)
         return hess_diag
@@ -202,37 +204,37 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
         assert xp.sum(xp.isnan(current[self.var_name]["var"])) == 0, xp.sum(xp.isnan(current[self.var_name]["var"]))
         dict_objective = dict()
 
-        nll_pixelwise = self.likelihood.neglog_pdf(
-            pixelwise=True,
+        nll_full = self.likelihood.neglog_pdf(
+            full=True,
         )  # (N, L)
 
         assert isinstance(
-            nll_pixelwise, xp.ndarray
-        ), "nll_pixelwise shoud be an array, check likelihood.neglog_pdf method"
-        assert nll_pixelwise.shape == (
+            nll_full, xp.ndarray
+        ), "nll_full shoud be an array, check likelihood.neglog_pdf method"
+        assert nll_full.shape == (
             self.N,
             self.L,
-        ), f"nll_pixelwise with wrong shape. is {nll_pixelwise.shape}, should be {(self.N, self.L)}"
+        ), f"nll_full with wrong shape. is {nll_full.shape}, should be {(self.N, self.L)}"
 
-        dict_objective["nll"] = xp.sum(nll_pixelwise)  # float
+        dict_objective["nll"] = xp.sum(nll_full)  # float
 
         if self.prior_spatial is not None:
-            nl_prior_spatial = self.prior_spatial.neglog_pdf(current[self.var_name]["var"])
+            nl_prior_spatial = self.prior_spatial.neglog_pdf()
             dict_objective["nl_prior_spatial"] = nl_prior_spatial  # (D,)
         else:
             nl_prior_spatial = xp.zeros((self.D,))
 
         if self.prior_indicator is not None:
-            nl_prior_indicator = self.prior_indicator.neglog_pdf(current[self.var_name]["var"])
+            nl_prior_indicator = self.prior_indicator.neglog_pdf()
             dict_objective["nl_prior_indicator"] = nl_prior_indicator  # (D,)
         else:
             nl_prior_indicator = xp.zeros((self.D,))
 
-        nl_posterior = xp.sum(nll_pixelwise) + xp.sum(nl_prior_spatial)
+        nl_posterior = xp.sum(nll_full) + xp.sum(nl_prior_spatial)
         nl_posterior += xp.sum(nl_prior_indicator)
         dict_objective["objective"] = nl_posterior
 
-        return dict_objective, nll_pixelwise
+        return dict_objective, nll_full
 
     def compute_all(
         self,
@@ -270,14 +272,14 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
         nlpdf_utils["nll"] = nll  # float
 
         if self.prior_indicator is not None:
-            nl_prior_indicator = self.prior_indicator.neglog_pdf(current[self.var_name]["var"])
+            nl_prior_indicator = self.prior_indicator.neglog_pdf()
         else:
             nl_prior_indicator = xp.zeros((self.D,))
         nlpdf_utils["nl_prior_indicator"] = nl_prior_indicator
 
         nlpdf_pixelwise = self.neglog_pdf(
             current,
-            pixelwise=True,
+            full=True,
             update_nlpdf_utils=False
         )  # (N, L)
         nlpdf_pix = xp.sum(nlpdf_pixelwise, axis=1)

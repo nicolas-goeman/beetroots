@@ -14,6 +14,7 @@ class ProposalIndicator:
         "lower_bounds",
         "upper_bounds",
         "margin_scale",
+        "rng"
     )
 
     def __init__(
@@ -21,6 +22,7 @@ class ProposalIndicator:
         lower_bounds: xp.ndarray,
         upper_bounds: xp.ndarray,
         indicator_margin_scale: float,
+        seed: int = 42,
     ) -> None:
         r"""
         Parameters
@@ -32,10 +34,10 @@ class ProposalIndicator:
         indicator_margin_scale : float
             margin scale of the indicator prior
         """
-        self.lower_bounds = lower_bounds
-        self.upper_bounds = upper_bounds
+        self.lower_bounds = xp.asarray(lower_bounds)
+        self.upper_bounds = xp.asarray(upper_bounds)
         self.margin_scale = indicator_margin_scale
-        
+        self.rng = xp.random.default_rng(seed=seed)
 
     def sample(
         self,
@@ -78,10 +80,11 @@ class ProposalIndicator:
         n_pix = idx_pix.size
         k_mtm = candidates.shape[1]
 
-        _pdf = penalty_one_pix(candidates[idx_pix].reshape(-1, candidates.shape[2:]),
+        _pdf = penalty_one_pix(candidates[idx_pix].reshape(-1, *candidates.shape[2:]),
                         self.lower_bounds,
                         self.upper_bounds,
                         self.margin_scale)  # (n_pix * k_mtm)
+        _pdf = _pdf.sum(axis=tuple(range(1, _pdf.ndim)))
         
         return _pdf.reshape((n_pix, k_mtm))
 

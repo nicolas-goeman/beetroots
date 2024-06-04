@@ -55,7 +55,7 @@ class MySaver(Saver):
                     )
 
         for k, v in nll_utils.items():
-            if np.all(["nll_" not in k, "grad" not in k, "hess_diag" not in k]):
+            if np.all(["nll_" not in k, "grad" not in k, "hess_diag" not in k, 'mtm' not in k]) and not isinstance(v, int):
                 self.memory[f"list_{k}"] = np.zeros(
                     (self.final_next_batch_size,) + v.shape
                 )
@@ -129,7 +129,7 @@ class MySaver(Saver):
                     self.memory[f"list_{k}"][t_save] = v
 
         for k, v in nll_utils.items():
-            if np.all(["nll_" not in k, "grad" not in k, "hess_diag" not in k]):
+            if np.all(["nll_" not in k, "grad" not in k, "hess_diag" not in k, 'mtm' not in k]) and not isinstance(v, int):
                 self.memory[f"list_{k}"][t_save] = v
 
         for k, v in dict_objective.items():

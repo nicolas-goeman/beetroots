@@ -261,7 +261,8 @@ class SimulationGaussianMixture(Simulation):
             self.D,
             self.list_means,
             self.list_cov,
-            var_name='theta'
+            var_name='theta',
+            vars_involved=('theta',),
         )
 
         # indicator prior
@@ -283,6 +284,8 @@ class SimulationGaussianMixture(Simulation):
             lower_bounds,
             upper_bounds,
             list_idx_sampling,
+            var_name='theta',
+            vars_involved=('theta',),
         )
 
         # posterior
@@ -295,7 +298,7 @@ class SimulationGaussianMixture(Simulation):
             prior_indicator=prior_indicator,
             var_name='theta'
         )
-        dict_posteriors = {"gaussian_mixture": [posterior_]}
+        dict_posteriors = {"gaussian_mixture": {'theta' :posterior_}}
         return dict_posteriors, scaler
 
     def setup(
@@ -381,7 +384,7 @@ class SimulationGaussianMixture(Simulation):
         )
         for model_name, posterior in dict_posteriors.items():
             results_mcmc.main(
-                posterior=posterior,
+                posterior=posterior['theta'], # FIXME: temporary solution to make it work with Extractor based on posterior target distributions.
                 model_name=model_name,
                 scaler=scaler,
                 list_names=self.list_names,
