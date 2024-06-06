@@ -38,7 +38,6 @@ sampling_params:
           upper_bounds:
             - +15.0
             - +15.0
-          seed: 42
 #
 # run params
 run_params:

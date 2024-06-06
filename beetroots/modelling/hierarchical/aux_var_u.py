@@ -19,10 +19,11 @@ class AuxiliaryGivenTarget(Likelihood, Hierarchical): #TODO: check is Likelihood
         D: int,
         L: int,
         N: int,
-        var_names: dict,
+        var_name: str,
+        var_names_dict: dict,
         sigma_m: Union[float, xp.ndarray],
     ) -> None:
-        super().__init__(forward_map, D, L, N)
+        super().__init__(forward_map, D, L, N, var_name, vars_involved=list(var_names_dict.values()))
 
         if isinstance(sigma_m, (float, int)):
             self.sigma_m = sigma_m * xp.ones((N, L))
@@ -31,7 +32,9 @@ class AuxiliaryGivenTarget(Likelihood, Hierarchical): #TODO: check is Likelihood
             self.sigma_m = sigma_m
         self.sigma_m2 = xp.square(self.sigma_m)
 
-        assert isinstance(var_names, dict) and list(var_names.keys()) == ["aux", "target"]
+        assert isinstance(var_names_dict, dict) and list(var_names_dict.keys()) == ["aux", "target"]
+
+        self.var_names_dict = var_names_dict
 
     def neglog_pdf(
         self,
@@ -77,18 +80,18 @@ class AuxiliaryGivenTarget(Likelihood, Hierarchical): #TODO: check is Likelihood
             
     def gradient_neglog_pdf(
         self,
-        var_name: str,
+        deriv_var_name: str,
         pixelwise: bool = False,
         full: bool = False,
         idx: Optional[xp.ndarray] = None,
     ) -> Union[float, xp.ndarray]:
          
-        if var_name == self.var_names["aux"]:
+        if deriv_var_name == self.var_names_dict["aux"]:
             out = self.gradient_neglog_pdf_wrt_aux(pixelwise, full, idx)
-        elif var_name == self.var_names["target"]:
+        elif deriv_var_name == self.var_names_dict["target"]:
             out = self.gradient_neglog_pdf_wrt_target(pixelwise, full, idx)
         else:
-            raise ValueError(f"var_name must be either {self.var_names["aux"]} or {self.var_names["target"]}")
+            raise ValueError(f"deriv_var_name must be either {self.var_names_dict["aux"]} or {self.var_names_dict["target"]}")
 
         if full:
             assert out.shape == (self.N, self.L)
@@ -108,7 +111,7 @@ class AuxiliaryGivenTarget(Likelihood, Hierarchical): #TODO: check is Likelihood
         out = xp.zeros((self.N, self.L))
 
         out += 3/2 + (self.nlpdf_utils['log_aux'] - self.forward_map_evals['log_f_Var']- 1)/self.sigma_m2
-        out /= -self.nlpdf_utils['aux2']
+        out /= -self.nlpdf_utils['aux']**2
 
         return out
 
@@ -125,18 +128,18 @@ class AuxiliaryGivenTarget(Likelihood, Hierarchical): #TODO: check is Likelihood
     
     def hess_diag_neglog_pdf(
         self,
-        var_name: str,
+        deriv_var_name: str,
         pixelwise: bool = False,
         full: bool = False,
         idx: Optional[xp.ndarray] = None,
     ) -> Union[float, xp.ndarray]:
         
-        if var_name == self.var_names["aux"]:
+        if deriv_var_name == self.var_names_dict["aux"]:
             out = self.hess_neglog_pdf_wrt_aux(pixelwise, full, idx)
-        elif var_name == self.var_names["target"]:
+        elif deriv_var_name == self.var_names_dict["target"]:
             out = self.hess_neglog_pdf_wrt_target(pixelwise, full, idx)
         else:
-            raise ValueError(f"var_name must be either {self.var_names["aux"]} or {self.var_names["target"]}")
+            raise ValueError(f"deriv_var_name must be either {self.var_names_dict["aux"]} or {self.var_names_dict["target"]}")
 
         if full:
             assert out.shape == (self.N, self.L)
@@ -152,13 +155,44 @@ class AuxiliaryGivenTarget(Likelihood, Hierarchical): #TODO: check is Likelihood
     
     def evaluate_all_nlpdf_utils(
         self,
-        var_name: str,
-        idx: Optional[xp.ndarray] = None,
+        current: dict[str, dict],
+        deriv_var_name: str = None,
+        idx_pix: Optional[xp.ndarray] = None,
         compute_derivatives: bool = True,
         compute_derivatives_2nd_order: bool = True,
+        mtm: bool = False,
     ) -> dict:
-        # TODO: implement nlpdf_utils method
-        self.nlpdf_utils = {}
+        # TODO: implement this method
+        shape_var = current[self.var_name]['var'].shape
+        assert isinstance(mtm, bool), f"mtm should be a boolean, got {type(mtm)}"
+
+        self.nlpdf_utils = dict()
+        self.nlpdf_utils["mtm"] = mtm
+
+        self.nlpdf_utils["aux"] = current[self.var_names_dict['aux']]['var']
+        self.nlpdf_utils["log_aux"] = xp.log(self.nlpdf_utils["aux"])
+
+        forward_var_inputs = current[self.var_names_dict['target']]['var']
+        if idx_pix is not None:
+            forward_var_inputs = forward_var_inputs[idx_pix]
+        if mtm:
+            forward_var_inputs = forward_var_inputs.reshape(-1, *shape_var[2:])
+        compute_derivatives_forward = compute_derivatives and deriv_var_name == "target"
+        compute_derivatives_2nd_order_forward = compute_derivatives_2nd_order and deriv_var_name == "target"
+        self.evaluate_all_forward_map(forward_var_inputs, compute_derivatives=compute_derivatives_forward, compute_derivatives_2nd_order=compute_derivatives_2nd_order_forward) # TODO: put variable and other required arguments here
+
+        n_pix = idx_pix.size if idx_pix is not None else shape_var[0]
+        k_mtm = shape_var[1] if mtm else 0
+        N_pix = self.forward_map_evals["f_Var"].shape[0]
+
+        if mtm:
+            assert n_pix * k_mtm == N_pix
+        else:
+            assert n_pix == N_pix
+
+        self.nlpdf_utils['n_pix'] = n_pix
+        self.nlpdf_utils['N_pix'] = N_pix
+        self.nlpdf_utils['k_mtm'] = k_mtm
 
     def sample_observation_model(
         self,

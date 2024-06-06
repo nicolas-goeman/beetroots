@@ -3,6 +3,8 @@ try :
 except :
     import numpy as xp
     
+from typing import Union
+
 from beetroots.sampler.utils import utils
 
 from beetroots.modelling.priors.smooth_indicator_prior import penalty_one_pix
@@ -20,8 +22,8 @@ class ProposalNeighborsAndIndicator:
 
     def sample(
         self,
-        Var,
-        idx_pix,
+        Var: xp.ndarray,
+        idx_pix: Union[dict, xp.ndarray],
         k_mtm,
     ) -> xp.ndarray:
         r"""draws a random vectors for components :math:`n` (e.g., a pixel :math:`\theta_n`). The distribution used to draw these vectors is:

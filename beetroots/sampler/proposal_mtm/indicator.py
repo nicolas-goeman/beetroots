@@ -14,7 +14,6 @@ class ProposalIndicator:
         "lower_bounds",
         "upper_bounds",
         "margin_scale",
-        "rng"
     )
 
     def __init__(
@@ -22,7 +21,6 @@ class ProposalIndicator:
         lower_bounds: xp.ndarray,
         upper_bounds: xp.ndarray,
         indicator_margin_scale: float,
-        seed: int = 42,
     ) -> None:
         r"""
         Parameters
@@ -37,15 +35,15 @@ class ProposalIndicator:
         self.lower_bounds = xp.asarray(lower_bounds)
         self.upper_bounds = xp.asarray(upper_bounds)
         self.margin_scale = indicator_margin_scale
-        self.rng = xp.random.default_rng(seed=seed)
 
     def sample(
         self,
         Var: xp.ndarray,
         idx_pix: xp.ndarray,
         k_mtm: int,
+        rng: xp.random.Generator,
     ) -> xp.ndarray:
-        seed = self.rng.integers(0, 1_000_000_000)
+        seed = rng.integers(0, 1_000_000_000)
 
         n_pix = idx_pix.size
         _shape = self.lower_bounds.shape

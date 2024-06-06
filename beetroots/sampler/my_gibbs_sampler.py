@@ -334,15 +334,20 @@ class MyGibbsSampler(Sampler):
             # --- RANDOM CHOICE PMALA / MTM ---
             acceptance_stats = {}
             for key in var_names:
-                type_t = self.rng.random()
-                if type_t < self.selection_probas[key][0]:
+                type_t = xp.argmax(
+                self.rng.multinomial(
+                    1,
+                    pvals=list(self.selection_probas.values()),
+                )
+            )
+                if type_t == 0:
                     (
                         accepted_t,
                         log_proba_accept_t,
                     ) = self.generate_new_sample_mtm(t, key, target_distributions[key])
                     acceptance_stats[key] = {"accepted_t": accepted_t, "log_proba_accept_t": log_proba_accept_t, "type_t": 0} # kernel choice 0 = MTM
                 else:
-                    assert type_t > self.selection_probas[key][0]
+                    assert type_t == 1
                     (
                         accepted_t,
                         log_proba_accept_t,
@@ -693,7 +698,7 @@ class MyGibbsSampler(Sampler):
             candidates = new_var * 1
             candidates = candidates.reshape((new_var.shape[0], 1, *new_var.shape[1:])).repeat(self.k_mtm[key] + 1, axis=1)  # (N, k_mtm, ...)
             candidates[idx_pix, :-1, ...] = self.proposal_distribution_mtm[key].sample(
-                new_var, idx_pix, self.k_mtm[key]
+                new_var, idx_pix, self.k_mtm[key], self.rng,
             )
 
             # --- COMPUTE WEIGHTS (USING LOG)

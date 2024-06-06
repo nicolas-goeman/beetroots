@@ -24,8 +24,17 @@ What we are doing currently is in a sense implementing a Gibbs sampler which cou
 
 We have decided to go with the **first option** in order to have something that could run in the time of the internship. It is also not sure yet how the second part will be shared across all projects so we won't dive into it too fast. We will describe here under how we plan/try to implement this approach in a generic manner.
 
-By generic we mean a hierarchical sampler that could be used with several hierarchical models.
-## Global
+By generic we mean a Gibbs sampler that could be used with several hierarchical models.
+
+The ```beetroots``` library can be seen as 3 major blocks.
+
+* **Sampler + modellingmodelling:** by  we mean all the classes that enable us to specify our statistical model, e.g. priors, likelihoods, posteriors, full conditionals and other component distributions. The sampler object will receive this modelling objects in order to proceed to the MCMC algorithms in itself.
+* **Simulations + RunMCMC:** in practice these elements precede the sampler and the modelling classes. Indeed, the ```Simulations``` and ```RunMCMC``` objects will instantiate our problems from a ```yaml``` file and command line arguments. It can for example run several MCMC chains in parallel with different sets of hyperparameters.
+* **Saver + ExtractorResults:** the saver object is simply an object that will save sequentially the current state of our MCMC process in order to start back from a checkpoint (random seeds are stored). The ```ExtractorResults``` is big tool that will create all the figures, plot, statistics related to our MCMC process (including model checking).
+
+We will address all of these blocks in the rest of the document.
+
+## 1. Global modelling + sampler
 
 In the following diagram, classes in green represent classes that were not present in the initial code structure and that were added for the sake of generalization.
 
@@ -180,7 +189,7 @@ classDiagram
     Saver o-- Scaler
     Scaler <|-- MyScaler
     Scaler <|-- IdScaler
-    TargetDistribution o-- ComponentDistribution
+    FullConditional o-- ComponentDistribution
     TargetDistribution <|-- Posterior
     TargetDistribution <|-- FullConditional
     ComponentDistribution <|-- PriorProbaDistribution
@@ -321,7 +330,7 @@ graph TD;
 ``` 
 -->
 
-## Sampler
+ **Focus on the initial sampler**
 
 ```mermaid
 classDiagram
@@ -352,11 +361,10 @@ The ```current``` attribute (dict) contain the following keys:
 
 We do not necessarily need to have the ```nll_utils``` or the ```forward_map_evals``` in the sampler as it would be messy with hierarchical models, speciafically for the ```nll_utils```. Moreover, if they are put in the sampler there might be duplicates as some distributions appear in different full conditionals.
 
-### Questions:
 
+## 2. Simulations and RunMCMC
 
-## Simulations
-
+### 2.1 Simulations
 Let's have a mermaid chart for everything that concerns the launch of a simulation. This incorporates files related to ```Simulation``` and ```RunMCMC``` classes and the children classes. Let us note that we only focus on the sampling solver and not the optimization one referred as *MAP* in the code. ```RunMCMC``` inherits from ```Run``` which also has children ```RunOptimMAP``` and ```RunOptimMLE``` that serve for this optimization approach which again is not of our interest here.
 
 
@@ -481,3 +489,39 @@ We need to create/modify a few new ```Simulation``` classes for the Gibbs sampli
 * We must modify the ```AstroSimulation``` since the ```__init__``` method is based on the current ```.yaml``` file.
 * We would like to modify ```SimulationRealDataNN```, ```SimulationToyCaseNN``` and ```SimulationToyCasePolyreg``` so that it can fit any ```SimulationTargetDistributionType``` child class. Currently, the ```SimulationMySampler``` is hard-coded in it which is not ideal. We do not want to recreate a simulation class for each new kernel. We might need to remove the ```SimulationTargetDistributionType``` classes to use scripts instead. For each kernel we should just defined the way to deal with the params. The setup_posterior might come from a utils script which just takes the params dict.
 * All this framework is considered with a single set of observations so a single likelihood. For multimodality which would involve more likelihoods we should extend the approach.
+
+### 2.2. RunMCMC
+
+## 3. Saver + ResultsExtractor
+
+### 3.1. Saver
+
+The saver object is not too complex and should not be very difficult to adapt to our ```GibbsSampler``` object. There is still a sensitive point cocnerning some objects that are saved. In the intial implementation attributes such as ```forward_map_eval``` were stored. However, with our new implementation this attribute for example is stored in the likelihood object and not in the sampler anymore. It might therefore not be easy to access it if it needs to be saved in order to be used in the ```ResultsExtractor``` object.
+
+### 3.2. ResultsExtractor
+
+The results extractor will call different objects, each responsible to produce some figures or statistics. Here are the followings tasks that are asked by the extarctor main object:
+
+* <span style="color:green">**step 1**</span> : clppd, i.e. computed log point-wise predictive density (see ``beetroots.inversion.results.utils.clppd``)
+  * This should be done only once for the whole statistical model.
+  * This still have a very strong dependence on the posterior approach (maybe not when we look at it since everything is already computed, to check!)
+* <span style="color:red">**step 2**</span> : kernel analysis (see ``beetroots.inversion.results.utils.kernel``)
+  * Related to the acceptance rates of both kernels.
+* <span style="color:red">**step 3**</span> : objective evolution (see ``beetroots.inversion.results.utils.objective``) (the objective is the negative log posterior pdf)
+* <span style="color:red">**step 4**</span> : MAP estimator from samples (see ``beetroots.inversion.results.utils.lowest_obj_estimator``)
+  * It uses the ``Scaler`` object.
+* <span style="color:red">**step 5**</span> : deal with whole Markov chain for MMSE and histograms, in a pixel-wise approach to avoid overloading the memory (see ``beetroots.inversion.results.utils.mc``)
+  * It uses the ``Scaler`` object.
+* <span style="color:red">**step 6**</span> : save global MMSE performance (see ``beetroots.inversion.results.utils.mmse_ci``)
+  * It uses the ``target_distribution`` and ``Scaler`` objects.
+* <span style="color:red">**step 7**</span> (if map) : plot maps of ESS (see ``beetroots.inversion.results.utils.ess_plots``)
+  * ESS is computed in step 5.
+* <span style="color:green">**step 8**</span> : model checking with Bayesian p-value computation (see ``beetroots.inversion.results.utils.bayes_pval_plots``)
+* <span style="color:red">**step 9**</span> (if the true value is known): plot how many components have their true value between min and max of Markov chain (see ``beetroots.inversion.results.utils.valid_mc``)
+* <span style="color:orange">**step 10**</span> : plot comparison of distributions of :math:`y_n` and :math:`f(\theta_n)` for all :math:`n \in [\![1, N]\!]` (see ``beetroots.inversion.results.utils.y_f_Theta``)
+  * It uses the ``ForwardMap`` and ``Scaler`` objects!
+* <span style="color:red">**step 11**</span> (if ``analyze_regularization_weight``) : analysis of the regularization weight :math:`\tau` automatic tuning (see ``beetroots.inversion.results.utils.regularization_weights``)
+
+The extractor itself uses the ```Posterior``` and the ``ForwardMap`` objects. We need to find a way to provide the ``ForwardMap`` object in the new approach.
+
+In <span style="color:red">red</span> are the statistics that can (must?) be computed for each variable involved. In <span style="color:green">green</span> are the sattistics related to the model as whole and which are therefore computed once. In <span style="color:orange">orange</span> are the statistics that are related to a specific variable but which are still not related to the model as whole.

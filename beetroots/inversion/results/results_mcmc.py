@@ -336,7 +336,7 @@ class ResultsExtractorMCMC(ResultsExtractor):
         )
 
         # save global MMSE performance
-        # (to do now, once the MMSE if computed for all pixels)
+        # (to do now, once the MMSE is computed for all pixels)
         _ = ResultsMMSEandCI(
             model_name,
             self.path_img,

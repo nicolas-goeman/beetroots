@@ -86,7 +86,7 @@ class GaussianMixtureLikelihood(Likelihood):
         L = D * 1  # make sure that theta space and y space are equal
         N = 1  # force only "one pixel"
         y = xp.zeros((N, L))
-        super().__init__(forward_map, D, L, N, y, var_name, vars_involved)
+        super().__init__(forward_map, D, L, N, var_name, vars_involved, y)
 
         assert isinstance(list_means, xp.ndarray)
         assert list_means.shape[1] == self.D
@@ -275,8 +275,6 @@ class GaussianMixtureLikelihood(Likelihood):
 
         n_pix = idx_pix.size if idx_pix is not None else self.N *1
         k_mtm = shape_var[1] if mtm else 0
-        if n_pix == self.N:
-            idx_pix = xp.arange(self.N)
         N_pix = self.forward_map_evals["f_Var"].shape[0]
         
         if mtm:
@@ -290,6 +288,7 @@ class GaussianMixtureLikelihood(Likelihood):
 
     def sample_observation_model(
         self,
+        current: dict[str, dict] = None,
         rng: xp.random.Generator = xp.random.default_rng(),
     ) -> xp.ndarray:
         # to be disregarded, as model checking does not make sense

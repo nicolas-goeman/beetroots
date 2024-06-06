@@ -49,6 +49,7 @@ class ComponentDistribution(ABC):
         idx_pix: Optional[xp.ndarray],
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool,
+        **kwargs,
         ) -> None:
         """Evaluate all utilities for the negative log-pdf and its eventual derivatives"""
         raise NotImplementedError

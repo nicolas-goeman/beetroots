@@ -103,3 +103,31 @@ class FullConditional(TargetDistribution):
             negative log pdf and derivatives of the posterior distribution
         """
         pass
+
+    def update_nlpdf_utils(
+        self,
+        current: dict[str, dict],
+        idx_pix: Optional[xp.ndarray] = None,
+        compute_derivatives: bool = True,
+        compute_derivatives_2nd_order: bool = True,
+        mtm: bool = False,
+        **kwargs,
+    ) -> None:
+        """Update all utilities for the negative log-pdf and its eventual derivatives
+
+        Parameters
+        ----------
+        current : dict[str, dict]
+            current iterate
+        idx_pix : np.ndarray, optional
+            indices of the pixels, by default None
+        compute_derivatives : bool, optional
+            whether to compute 1st order derivatives, by default True
+        compute_derivatives_2nd_order : bool, optional
+            whether to compute 2nd order derivatives, by default True
+        mtm : bool, optional    
+            whether to use the MTM, by default False
+        """
+        for cd in self.distribution_components.values():
+            cd.evaluate_all_nlpdf_utils(current, idx_pix, compute_derivatives, compute_derivatives_2nd_order, mtm, deriv_var_name=self.var_name, **kwargs)
+

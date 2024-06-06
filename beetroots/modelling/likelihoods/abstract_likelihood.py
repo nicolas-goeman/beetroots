@@ -18,9 +18,9 @@ class Likelihood(ComponentDistribution):
         D: int,
         L: int,
         N: int,
-        y: xp.ndarray,
         var_name: str,
         vars_involved: list[str],
+        y: Optional[xp.ndarray] = None,
     ) -> None:
         self.forward_map = forward_map
         self.forward_map_evals = {}
@@ -69,7 +69,7 @@ class Likelihood(ComponentDistribution):
 
     @abstractmethod
     def sample_observation_model(
-        self, forward_map_evals: dict, rng: Optional[xp.random.Generator] # Used for model checking (maybe for something else)
+        self, current: dict, rng: Optional[xp.random.Generator] # Used for model checking (maybe for something else)
     ) -> xp.ndarray:
         raise NotImplementedError
 
