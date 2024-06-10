@@ -7,11 +7,11 @@ from beetroots.modelling.priors.spatial_prior_params import SpatialPriorParams
 from beetroots.sampler.utils.sampler_params import MySamplerParams
 from beetroots.simulations.abstract_simulation import Simulation
 from beetroots.simulations.astro import data_validation
-from beetroots.simulations.astro.forward_map.abstract_poly_reg import (
+from beetroots.simulations.astro.forward_map_setup.abstract_poly_reg import (
     SimulationPolynomialReg,
 )
-from beetroots.simulations.astro.observation.abstract_toy_case import SimulationToyCase
-from beetroots.simulations.astro.posterior_type.abstract_mysampler import (
+from beetroots.simulations.astro.observation_setup.abstract_toy_case import SimulationToyCase
+from beetroots.simulations.astro.sampler_setup.abstract_mysampler import (
     SimulationMySampler,
 )
 

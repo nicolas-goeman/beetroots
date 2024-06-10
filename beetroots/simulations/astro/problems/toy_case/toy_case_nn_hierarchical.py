@@ -1,3 +1,4 @@
+import os
 from typing import Dict, List, Optional, Union
 
 import numpy as np
@@ -6,16 +7,14 @@ from beetroots.modelling.priors.spatial_prior_params import SpatialPriorParams
 from beetroots.sampler.utils.sampler_params import MySamplerParams
 from beetroots.simulations.abstract_simulation import Simulation
 from beetroots.simulations.astro import data_validation
-from beetroots.simulations.astro.forward_map.abstract_nn import SimulationNN
-from beetroots.simulations.astro.observation.abstract_real_data import (
-    SimulationRealData,
-)
-from beetroots.simulations.astro.posterior_type.abstract_mysampler import (
+from beetroots.simulations.astro.forward_map_setup.abstract_nn import SimulationNN
+from beetroots.simulations.astro.observation_setup.abstract_toy_case import SimulationToyCase
+from beetroots.simulations.astro.sampler_setup.abstract_mysampler import (
     SimulationMySampler,
 )
 
 
-class SimulationRealDataNN(SimulationNN, SimulationRealData, SimulationMySampler):
+class SimulationToyCaseNN(SimulationNN, SimulationToyCase, SimulationMySampler):
     __slots__ = (
         "path_output_sim",
         "path_img",
@@ -43,61 +42,56 @@ class SimulationRealDataNN(SimulationNN, SimulationRealData, SimulationMySampler
 
     def setup(
         self,
-        # forward_model
         forward_model_name: str,
         force_use_cpu: bool,
         fixed_params: Dict[str, Optional[float]],
         is_log_scale_params: Dict[str, bool],
         #
-        data_int_path: str,
-        data_err_path: str,
+        sigma_a_float: float,
         sigma_m_float: float,
-        # prior_indicator
+        omega_float: float,
+        #
         indicator_margin_scale: float,
         lower_bounds_lin: np.ndarray,
         upper_bounds_lin: np.ndarray,
-        # spatial_prior
+        #
         with_spatial_prior: bool = True,
         spatial_prior_params: Union[None, SpatialPriorParams] = None,
-        # likelihood
         list_gaussian_approx_params: List[bool] = [],
         list_mixing_model_params: List[Dict[str, str]] = [],
     ):
+        self.N = int(self.cloud_name.split("N")[1]) ** 2
+
         self.list_lines_valid = []
 
-        (
-            df_int_fit,
-            y_fit,
-            sigma_a_fit,
-            omega_fit,
-            y_valid,
-            sigma_a_valid,
-            omega_valid,
-        ) = self.setup_observation(
-            data_int_path=data_int_path,
-            data_err_path=data_err_path,
-        )
         scaler, forward_map = self.setup_forward_map(
             forward_model_name=forward_model_name,
             force_use_cpu=force_use_cpu,
             dict_fixed_params=fixed_params,
             dict_is_log_scale_params=is_log_scale_params,
         )
-        sigma_m_fit = sigma_m_float * np.ones((self.N, self.L))
 
-        # run setup
-        print(f"lower_bounds_lin = {lower_bounds_lin}")
+        sigma_a = sigma_a_float * np.ones((self.N, self.L))
+        sigma_m = sigma_m_float * np.ones((self.N, self.L))
+        omega = omega_float * np.ones((self.N, self.L))
 
-        dict_posteriors, scaler, prior_indicator_1pix = self.setup_target_distribution(
-            # always needed for astro
+        syn_map, y = self.setup_observation(
             scaler=scaler,
             forward_map=forward_map,
-            y=y_fit,
-            sigma_a=sigma_a_fit,
-            sigma_m=sigma_m_fit,
-            omega=omega_fit,
-            syn_map=df_int_fit,
-            # Component distributions params
+            sigma_a=sigma_a,
+            sigma_m=sigma_m,
+            omega=omega,
+        )
+
+        # run setup
+        dict_posteriors, scaler, prior_indicator_1pix = self.setup_target_distribution(
+            scaler=scaler,
+            forward_map=forward_map,
+            y=y,
+            sigma_a=sigma_a,
+            sigma_m=sigma_m,
+            omega=omega,
+            syn_map=syn_map,
             with_spatial_prior=with_spatial_prior,
             spatial_prior_params=spatial_prior_params,
             indicator_margin_scale=indicator_margin_scale,
@@ -106,6 +100,11 @@ class SimulationRealDataNN(SimulationNN, SimulationRealData, SimulationMySampler
             list_gaussian_approx_params=list_gaussian_approx_params,
             list_mixing_model_params=list_mixing_model_params,
         )
+
+        y_valid = None
+        sigma_a_valid = None
+        omega_valid = None
+
         return (
             dict_posteriors,
             scaler,
@@ -115,12 +114,7 @@ class SimulationRealDataNN(SimulationNN, SimulationRealData, SimulationMySampler
             omega_valid,
         )
 
-    def main(
-        self,
-        params: dict,
-        path_data_cloud: str,
-        point_challenger: dict = {},
-    ) -> None:
+    def main(self, params: dict, path_data_cloud: str) -> None:
         if params["with_spatial_prior"]:
             spatial_prior_params = SpatialPriorParams(
                 **params["spatial_prior"],
@@ -128,41 +122,40 @@ class SimulationRealDataNN(SimulationNN, SimulationRealData, SimulationMySampler
         else:
             spatial_prior_params = None
 
-        sigma_m_float = np.log(params["sigma_m_float_linscale"])
         (
             dict_posteriors,
             scaler,
             prior_indicator_1pix,
-            y_valid,
-            sigma_a_valid,
-            omega_valid,
-        ) = self.setup(
+            y_valid,  # None
+            sigma_a_valid,  # None
+            omega_valid,  # None
+        ) = simulation.setup(
             **params["forward_model"],
             #
-            data_int_path=f"{path_data_cloud}/{params['filename_int']}",
-            data_err_path=f"{path_data_cloud}/{params['filename_err']}",
-            sigma_m_float=sigma_m_float,
+            sigma_a_float=params["sigma_a_float"],
+            sigma_m_float=np.log(params["sigma_m_float_linscale"]),
+            omega_float=3 * params["sigma_a_float"],
             #
             **params["prior_indicator"],
             #
             with_spatial_prior=params["with_spatial_prior"],
             spatial_prior_params=spatial_prior_params,
+            #
             list_gaussian_approx_params=params["list_gaussian_approx_params"],
             list_mixing_model_params=[
                 {"path_transition_params": f"{path_data_cloud}/{filename}"}
                 for filename in params["mixing_model_params_filename"]
             ],
         )
-        self.save_and_plot_setup(
+        simulation.save_and_plot_setup(
             dict_posteriors,
             params["prior_indicator"]["lower_bounds_lin"],
             params["prior_indicator"]["upper_bounds_lin"],
             scaler,
         )
-
         # * Optim MAP
         if params["to_run_optim_map"]:
-            list_model_names = self.inversion_optim_map(
+            simulation.inversion_optim_map(
                 dict_posteriors=dict_posteriors,
                 scaler=scaler,
                 my_sampler_params=MySamplerParams(**params["sampling_params"]["map"]),
@@ -172,19 +165,36 @@ class SimulationRealDataNN(SimulationNN, SimulationRealData, SimulationMySampler
 
         # * MCMC
         if params["to_run_mcmc"]:
-            list_model_names = self.inversion_mcmc(
+            simulation.inversion_mcmc(
                 dict_posteriors=dict_posteriors,
                 scaler=scaler,
                 my_sampler_params=MySamplerParams(**params["sampling_params"]["mcmc"]),
                 can_run_in_parallel=params["forward_model"]["force_use_cpu"],
-                #
-                y_valid=y_valid,
-                sigma_a_valid=sigma_a_valid,
-                omega_valid=omega_valid,
-                sigma_m_valid=sigma_m_float * np.ones_like(sigma_a_valid),
-                #
-                point_challenger=point_challenger,
                 **params["run_params"]["mcmc"],
             )
-
         return
+
+
+if __name__ == "__main__":
+    yaml_file, path_data, path_models, path_outputs = SimulationToyCaseNN.parse_args()
+
+    params = SimulationToyCaseNN.load_params(path_data, yaml_file)
+
+    SimulationToyCaseNN.check_input_params_file(
+        params,
+        data_validation.schema,
+    )
+
+    simulation = SimulationToyCaseNN(
+        **params["simu_init"],
+        yaml_file=yaml_file,
+        path_data=path_data,
+        path_outputs=path_outputs,
+        path_models=path_models,
+        forward_model_fixed_params=params["forward_model"]["fixed_params"],
+    )
+
+    simulation.main(
+        params=params,
+        path_data_cloud=path_data,
+    )

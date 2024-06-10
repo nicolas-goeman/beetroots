@@ -91,6 +91,12 @@ class MyScaler(Scaler):
             grid of simulations
         D_no_kappa : int
             number of physical parameters that require a standard scaler
+        mean_ : np.ndarray of shape (D,)
+            mean of the D components :math:`\theta_d`, used in the data normalization
+        std_ : np.ndarray of shape (D,)
+            standard deviation of the D components :math:`\theta_d`, used in the data normalization
+        list_is_log : List[bool]
+            list of booleans indicating if the parameter is log-scaled
         """
         if mean_ is not None and std_ is not None and list_is_log is not None:
             self.D_no_kappa = mean_.size * 1

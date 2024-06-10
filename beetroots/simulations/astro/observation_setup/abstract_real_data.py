@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from beetroots.inversion.plots.map_shaper import MapShaper
-from beetroots.simulations.astro.observation.abstract_observation import (
+from beetroots.simulations.astro.observation_setup.abstract_observation import (
     SimulationObservation,
 )
 

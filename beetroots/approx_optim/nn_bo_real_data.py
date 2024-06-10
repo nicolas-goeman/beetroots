@@ -6,7 +6,7 @@ import numpy as np
 import yaml
 
 from beetroots.approx_optim.nn_bo import ApproxParamsOptimNNBO
-from beetroots.simulations.astro.observation.abstract_real_data import (
+from beetroots.simulations.astro.observation_setup.abstract_real_data import (
     SimulationRealData,
 )
 

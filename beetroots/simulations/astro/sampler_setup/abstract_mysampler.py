@@ -12,21 +12,20 @@ from beetroots.modelling.likelihoods.approx_censored_add_mult import (
 )
 from beetroots.modelling.likelihoods.gaussian_censored import CensoredGaussianLikelihood
 from beetroots.modelling.target_distribution.posterior import Posterior
-from beetroots.modelling.target_distribution.full_conditional import FullConditional
 from beetroots.modelling.priors.l22_laplacian_prior import L22LaplacianSpatialPrior
 from beetroots.modelling.priors.smooth_indicator_prior import SmoothIndicatorPrior
 from beetroots.modelling.priors.spatial_prior_params import SpatialPriorParams
 from beetroots.sampler.my_sampler import MySampler
 from beetroots.sampler.saver.my_saver import MySaver
 from beetroots.sampler.utils.sampler_params import MySamplerParams
-from beetroots.simulations.astro.posterior_type.abstract_posterior_type import (
+from beetroots.simulations.astro.sampler_setup.abstract_posterior_type import (
     SimulationTargetDistributionType,
 )
 from beetroots.space_transform.transform import MyScaler
 
-import importlib
 
-class SimulationMyGibbsSampler(SimulationTargetDistributionType):
+
+class SimulationMySampler(SimulationTargetDistributionType):
     def setup_target_distribution(
         self,
         scaler,
@@ -36,8 +35,27 @@ class SimulationMyGibbsSampler(SimulationTargetDistributionType):
         sigma_m,
         omega,
         syn_map,
-        params_target_distributions,
+        with_spatial_prior: bool,
+        spatial_prior_params: Optional[SpatialPriorParams],
+        indicator_margin_scale: float,
+        lower_bounds_lin: Union[np.ndarray, List[float]],
+        upper_bounds_lin: Union[np.ndarray, List[float]],
+        list_gaussian_approx_params: List[bool],
+        list_mixing_model_params: List[Dict[str, str]],
     ) -> None:
+
+        if with_spatial_prior:
+            assert spatial_prior_params is not None
+            prior_spatial = L22LaplacianSpatialPrior(
+                spatial_prior_params,
+                self.cloud_name,
+                N=self.N,
+                D=self.D_sampling,
+                df=syn_map,
+                list_idx_sampling=self.list_idx_sampling,
+            )
+        else:
+            prior_spatial = None
 
         # indicator prior
         if isinstance(lower_bounds_lin, list):
@@ -70,18 +88,34 @@ class SimulationMyGibbsSampler(SimulationTargetDistributionType):
 
         # likelihood
 
-        target_distributions = {}
-        for i, (target_dist_name, dict_params_component_dists) in enumerate(params_target_distributions.items()):
-            component_distributions = []
-            for j, (component_dist_name, dict_params) in enumerate(dict_params_component_dists.items()):
-                
-                class_ = importlib.import_module('beetroots.modelling.'+dict_params['module'], dict_params['class_name'])
-                component_distributions.append(class_(**dict_params['params']))
+        dict_posteriors = {}
+        for i, dict_params in enumerate(list_mixing_model_params):
+            model_name = f"mixing_{i}"
 
-                target_distribution = FullConditional(
-                    **dict_params_target,
-                )
-                target_distributions[target_dist_name] = target_distribution
+            likelihood_mixing = MixingModelsLikelihood(
+                forward_map,
+                self.D_sampling,
+                self.L,
+                self.N,
+                y,
+                sigma_a,
+                sigma_m,
+                omega,
+                path_transition_params=dict_params["path_transition_params"],
+                list_lines_fit=self.list_lines_fit * 1,
+            )
+            # separable+True: if no spatial prior, still possible to
+            # run chromatic Gibbs on MTM
+            posterior_mixing = Posterior(
+                self.D_sampling,
+                self.L,
+                self.N,
+                likelihood=likelihood_mixing,
+                prior_spatial=prior_spatial,
+                prior_indicator=prior_indicator,
+                separable=True,  # only used if no spatial prior
+            )
+            dict_posteriors[model_name] = posterior_mixing
 
         for is_raw in list_gaussian_approx_params:
             name = "raw" if is_raw else "transformed"

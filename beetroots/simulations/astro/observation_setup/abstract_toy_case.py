@@ -5,7 +5,7 @@ import pandas as pd
 
 from beetroots.inversion.plots.map_shaper import MapShaper
 from beetroots.modelling.forward_maps.abstract_base import ForwardMap
-from beetroots.simulations.astro.observation.abstract_observation import (
+from beetroots.simulations.astro.observation_setup.abstract_observation import (
     SimulationObservation,
 )
 from beetroots.space_transform.transform import MyScaler
