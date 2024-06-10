@@ -22,7 +22,7 @@ if __name__ == "__main__":
     # Check that the input parameters respect a given schema (in terms of dict/ done with cerberus library)
     SimulationRealDataNN.check_input_params_file(
         params,
-        data_validation.schema,
+        data_validation.schema_astro_posterior,
     )
 
     pixels_of_interest = {}

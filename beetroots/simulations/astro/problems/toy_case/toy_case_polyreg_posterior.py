@@ -11,7 +11,7 @@ from beetroots.simulations.astro.forward_map_setup.abstract_poly_reg import (
     SimulationPolynomialReg,
 )
 from beetroots.simulations.astro.observation_setup.abstract_toy_case import SimulationToyCase
-from beetroots.simulations.astro.sampler_setup.abstract_mysampler import (
+from beetroots.simulations.astro.sampler_setup.abstract_sampler_posterior import (
     SimulationMySampler,
 )
 
@@ -187,7 +187,7 @@ if __name__ == "__main__":
 
     SimulationToyCasePolyReg.check_input_params_file(
         params,
-        data_validation.schema,
+        data_validation.schema_astro_posterior,
     )
 
     simulation = SimulationToyCasePolyReg(

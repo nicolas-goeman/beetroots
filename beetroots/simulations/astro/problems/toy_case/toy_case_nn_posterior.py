@@ -9,7 +9,7 @@ from beetroots.simulations.abstract_simulation import Simulation
 from beetroots.simulations.astro import data_validation
 from beetroots.simulations.astro.forward_map_setup.abstract_nn import SimulationNN
 from beetroots.simulations.astro.observation_setup.abstract_toy_case import SimulationToyCase
-from beetroots.simulations.astro.sampler_setup.abstract_mysampler import (
+from beetroots.simulations.astro.sampler_setup.abstract_sampler_posterior import (
     SimulationMySampler,
 )
 
@@ -139,7 +139,7 @@ class SimulationToyCaseNN(SimulationNN, SimulationToyCase, SimulationMySampler):
             **params["prior_indicator"],
             #
             with_spatial_prior=params["with_spatial_prior"],
-            spatial_prior_params=spatial_prior_params,
+            spatial_prior_params=spatial_prior_params, 
             #
             list_gaussian_approx_params=params["list_gaussian_approx_params"],
             list_mixing_model_params=[
@@ -182,7 +182,7 @@ if __name__ == "__main__":
 
     SimulationToyCaseNN.check_input_params_file(
         params,
-        data_validation.schema,
+        data_validation.schema_astro_posterior,
     )
 
     simulation = SimulationToyCaseNN(

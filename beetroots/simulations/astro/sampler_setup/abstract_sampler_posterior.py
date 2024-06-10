@@ -18,7 +18,7 @@ from beetroots.modelling.priors.spatial_prior_params import SpatialPriorParams
 from beetroots.sampler.my_sampler import MySampler
 from beetroots.sampler.saver.my_saver import MySaver
 from beetroots.sampler.utils.sampler_params import MySamplerParams
-from beetroots.simulations.astro.sampler_setup.abstract_posterior_type import (
+from beetroots.simulations.astro.sampler_setup.abstract_sampler_approach import (
     SimulationTargetDistributionType,
 )
 from beetroots.space_transform.transform import MyScaler

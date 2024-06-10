@@ -19,7 +19,7 @@ from beetroots.modelling.priors.spatial_prior_params import SpatialPriorParams
 from beetroots.sampler.my_sampler import MySampler
 from beetroots.sampler.saver.my_saver import MySaver
 from beetroots.sampler.utils.sampler_params import MySamplerParams
-from beetroots.simulations.astro.sampler_setup.abstract_posterior_type import (
+from beetroots.simulations.astro.sampler_setup.abstract_sampler_approach import (
     SimulationTargetDistributionType,
 )
 from beetroots.space_transform.transform import MyScaler
@@ -36,8 +36,23 @@ class SimulationMyGibbsSampler(SimulationTargetDistributionType):
         sigma_m,
         omega,
         syn_map,
-        params_target_distributions,
+        params_component_distributions: dict[str, dict],
+        dict_target_distributions_to_components: dict[str, list],
     ) -> None:
+        
+        component_distributions = dict()
+        dict_shape_problem = {"D": self.D, "L": self.L, "N": self.N}
+
+        for component_name, dic in component_distributions.items():
+            module_ = importlib.import_module(dic['module'])
+            class_ = getattr(module_, dic['class_name'])
+            kwargs = dic['params']
+            kwargs.update(dict_shape_problem) # Will not be used by all component distributions
+
+
+
+            
+            self.proposal_distributions_mtm[key] = class_(**kwargs)
 
         # indicator prior
         if isinstance(lower_bounds_lin, list):
@@ -51,6 +66,7 @@ class SimulationMyGibbsSampler(SimulationTargetDistributionType):
         upper_bounds = scaler.from_lin_to_scaled(
             upper_bounds_lin.reshape((1, self.D)),
         ).flatten()
+        
         prior_indicator = SmoothIndicatorPrior(
             self.D_sampling,
             self.N,
@@ -59,17 +75,8 @@ class SimulationMyGibbsSampler(SimulationTargetDistributionType):
             upper_bounds,
             list_idx_sampling=self.list_idx_sampling,
         )
-        prior_indicator_1pix = SmoothIndicatorPrior(
-            self.D_sampling,
-            1,
-            indicator_margin_scale,
-            lower_bounds,
-            upper_bounds,
-            list_idx_sampling=self.list_idx_sampling,
-        )
 
         # likelihood
-
         target_distributions = {}
         for i, (target_dist_name, dict_params_component_dists) in enumerate(params_target_distributions.items()):
             component_distributions = []

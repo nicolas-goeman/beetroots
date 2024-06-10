@@ -9,12 +9,10 @@ from beetroots.simulations.abstract_simulation import Simulation
 from beetroots.simulations.astro import data_validation
 from beetroots.simulations.astro.forward_map_setup.abstract_nn import SimulationNN
 from beetroots.simulations.astro.observation_setup.abstract_toy_case import SimulationToyCase
-from beetroots.simulations.astro.sampler_setup.abstract_mysampler import (
-    SimulationMySampler,
-)
+from beetroots.simulations.astro.sampler_setup.abstract_sampler_hierarchical import SimulationMyGibbsSampler
 
 
-class SimulationToyCaseNN(SimulationNN, SimulationToyCase, SimulationMySampler):
+class SimulationToyCaseNN(SimulationNN, SimulationToyCase, SimulationMyGibbsSampler):
     __slots__ = (
         "path_output_sim",
         "path_img",
@@ -136,16 +134,7 @@ class SimulationToyCaseNN(SimulationNN, SimulationToyCase, SimulationMySampler):
             sigma_m_float=np.log(params["sigma_m_float_linscale"]),
             omega_float=3 * params["sigma_a_float"],
             #
-            **params["prior_indicator"],
-            #
-            with_spatial_prior=params["with_spatial_prior"],
-            spatial_prior_params=spatial_prior_params,
-            #
-            list_gaussian_approx_params=params["list_gaussian_approx_params"],
-            list_mixing_model_params=[
-                {"path_transition_params": f"{path_data_cloud}/{filename}"}
-                for filename in params["mixing_model_params_filename"]
-            ],
+            params_components = params['target_distributions'],
         )
         simulation.save_and_plot_setup(
             dict_posteriors,
@@ -182,7 +171,7 @@ if __name__ == "__main__":
 
     SimulationToyCaseNN.check_input_params_file(
         params,
-        data_validation.schema,
+        data_validation.schema_astro_hierarchical,
     )
 
     simulation = SimulationToyCaseNN(

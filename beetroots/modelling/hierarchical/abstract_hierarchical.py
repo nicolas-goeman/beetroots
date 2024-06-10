@@ -14,11 +14,10 @@ class Hierarchical(ComponentDistribution):
 
     def __init__(
         self,
-        D: int,
-        L: int,
-        N: int,
+        var_name: str,
+        vars_involved: list[str]
     ) -> None:
-        super().__init__(D, L, N)
+        super().__init__(var_name, vars_involved)
 
         self.hyperparameters = None
 
