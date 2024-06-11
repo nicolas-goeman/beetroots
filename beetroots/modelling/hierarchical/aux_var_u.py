@@ -61,7 +61,13 @@ class AuxiliaryGivenTarget(Likelihood, Hierarchical): #TODO: check is Likelihood
     def gradient_neglog_pdf_wrt_aux(
         self,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.N, self.L))
+        """Computes the gradient of the negative log-pdf with respect to the auxiliary variable.
+
+        Returns:
+            Union[float, xp.ndarray]: array of shape (N, L)
+        """        
+        N_pix = self.nlpdf_utils['N_pix']
+        out = xp.zeros((N_pix, self.L))
 
         out += 3/2 + (self.nlpdf_utils['log_aux'] - self.forward_map_evals['log_f_Var'])/self.sigma_m2
         out /= self.nlpdf_utils['aux']
@@ -71,44 +77,69 @@ class AuxiliaryGivenTarget(Likelihood, Hierarchical): #TODO: check is Likelihood
     def gradient_neglog_pdf_wrt_target(
         self,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.N, self.L))
+        """Computes the gradient of the negative log-pdf with respect to the target variable.
 
-        out -= self.forward_map_evals['grad_log_f_Var']*(self.nlpdf_utils['log_aux'] + self.sigma_m2/2 - self.forward_map_evals['log_f_Var'])
+        Returns:
+            Union[float, xp.ndarray]: array of shape (N, D)
+        """        
+        N_pix = self.nlpdf_utils['N_pix']
+        out = xp.zeros((N_pix, self.D, self.L))
+
+        out -= self.forward_map_evals['grad_log_f_Var']*xp.expand_dims(self.nlpdf_utils['log_aux'] + self.sigma_m2/2 - self.forward_map_evals['log_f_Var'], axis=1)
         out /= self.sigma_m2
 
-        return out
+        return out.sum(axis=-1) # sum over the last axis L, outputs a (N, D) array
             
     def gradient_neglog_pdf(
         self,
         deriv_var_name: str,
         pixelwise: bool = False,
         full: bool = False,
-        idx: Optional[xp.ndarray] = None,
     ) -> Union[float, xp.ndarray]:
+        """Computes the gradient of the negative log-pdf with respect to the auxiliary or target variable.
+
+        Args:
+            deriv_var_name (str): variable name for which the gradient is computed
+            pixelwise (bool, optional): if the gradient of the nlpdf is summed up for eadh pixel. Defaults to False.
+            full (bool, optional): keeps the full information (each dimension is kept). Defaults to False.
+
+        Raises:
+            ValueError: variable name for differentiation must be either "aux" or "target"
+
+        Returns:
+            Union[float, xp.ndarray]: array of shape (n_pix, [k_mtm], L) or (n_pix, [k_mtm], D) if full else if pixelwise array of shape (N,) or (N, [k_mtm]) else float or array of shape (k_mtm,)
+        """        
+        n_pix = self.nlpdf_utils['n_pix']
+        k_mtm = self.nlpdf_utils['k_mtm']
+        N_pix = self.nlpdf_utils['N_pix']
          
         if deriv_var_name == self.var_names_dict["aux"]:
-            out = self.gradient_neglog_pdf_wrt_aux(pixelwise, full, idx)
+            out = self.gradient_neglog_pdf_wrt_aux()
         elif deriv_var_name == self.var_names_dict["target"]:
-            out = self.gradient_neglog_pdf_wrt_target(pixelwise, full, idx)
+            out = self.gradient_neglog_pdf_wrt_target()
         else:
             raise ValueError(f"deriv_var_name must be either {self.var_names_dict["aux"]} or {self.var_names_dict["target"]}")
 
         if full:
-            assert out.shape == (self.N, self.L)
-            return out
+            if deriv_var_name == self.var_names_dict["aux"]:
+                assert out.shape == (N_pix, self.L)
+            elif deriv_var_name == self.var_names_dict["target"]:
+                assert out.shape == (N_pix, self.D)
+            return out if k_mtm == 0 else out.reshape(n_pix, k_mtm, *out.shape[1:])
         elif pixelwise:
-            out = xp.sum(out, axis=1)
-            assert out.shape == (self.N,)
-            return out
+            out = xp.sum(out, axis=tuple(range(1, out.ndim)))
+            assert out.shape == (N_pix,)
+            return out if k_mtm == 0 else out.reshape(n_pix, k_mtm)
         else:
-            out = xp.sum(out)
-        
-        return out
+            if k_mtm > 0:
+                out = out.reshape(n_pix, k_mtm, *out.shape[1:])
+            return xp.sum(out) if k_mtm == 0 else out.swapaxes(0, 1).sum(axis=tuple(range(1, out.ndim)))
     
     def hess_diag_neglog_pdf_wrt_aux(
         self,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.N, self.L))
+        N_pix = self.nlpdf_utils['N_pix']
+        out = xp.zeros((N_pix, self.L))
 
         out += 3/2 + (self.nlpdf_utils['log_aux'] - self.forward_map_evals['log_f_Var']- 1)/self.sigma_m2
         out /= -self.nlpdf_utils['aux']**2
@@ -118,40 +149,61 @@ class AuxiliaryGivenTarget(Likelihood, Hierarchical): #TODO: check is Likelihood
     def hess_diag_neglog_pdf_wrt_target(
         self,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.N, self.L))
+        N_pix = self.nlpdf_utils['N_pix']
+        out = xp.zeros((N_pix, self.D, self.L))
 
-        out += self.forward_map_evals['hess_diag_log_f_Var']*(self.nlpdf_utils['log_aux'] + self.sigma_m2/2 - self.forward_map_evals['log_f_Var'])
+        out += self.forward_map_evals['hess_diag_log_f_Var']*xp.expand_dims(self.nlpdf_utils['log_aux'] + self.sigma_m2/2 - self.forward_map_evals['log_f_Var'], axis=1)
         out -= self.forward_map_evals['grad_log_f_Var']**2
         out /= self.sigma_m2
 
-        return out
+        return out.sum(axis=-1) # sum over the last axis L, outputs a (N, D) array
     
     def hess_diag_neglog_pdf(
         self,
         deriv_var_name: str,
         pixelwise: bool = False,
         full: bool = False,
-        idx: Optional[xp.ndarray] = None,
     ) -> Union[float, xp.ndarray]:
+        """Computes the diagonal of the Hessian of the negative log-pdf with respect to the auxiliary or target variable.
+
+        Args:
+            deriv_var_name (str): variable name for which the Hessian is computed
+            pixelwise (bool, optional): if the diagonal of the hessian of the nlpdf is summed up for eadh pixel. Defaults to False.
+            full (bool, optional): keeps the full information (each dimension is kept). Defaults to False.
+
+        Raises:
+            ValueError: variable name for differentiation must be either "aux" or "target"
+
+        Returns:
+            Union[float, xp.ndarray]: array of shape (n_pix, [k_mtm], L) or (n_pix, [k_mtm], D) if full else if pixelwise array of shape (N,) or (N, [k_mtm]) else float or array of shape (k_mtm,)
+        """        
         
+        n_pix = self.nlpdf_utils['n_pix']
+        k_mtm = self.nlpdf_utils['k_mtm']
+        N_pix = self.nlpdf_utils['N_pix']
+         
         if deriv_var_name == self.var_names_dict["aux"]:
-            out = self.hess_neglog_pdf_wrt_aux(pixelwise, full, idx)
+            out = self.hess_neglog_pdf_wrt_aux()
         elif deriv_var_name == self.var_names_dict["target"]:
-            out = self.hess_neglog_pdf_wrt_target(pixelwise, full, idx)
+            out = self.hess_neglog_pdf_wrt_target()
         else:
             raise ValueError(f"deriv_var_name must be either {self.var_names_dict["aux"]} or {self.var_names_dict["target"]}")
 
         if full:
-            assert out.shape == (self.N, self.L)
-            return out
+            if deriv_var_name == self.var_names_dict["aux"]:
+                assert out.shape == (N_pix, self.L)
+            elif deriv_var_name == self.var_names_dict["target"]:
+                assert out.shape == (N_pix, self.D)
+            return out if k_mtm == 0 else out.reshape(n_pix, k_mtm, *out.shape[1:])
         elif pixelwise:
-            out = xp.sum(out, axis=1)
-            assert out.shape == (self.N,)
-            return out
+            out = xp.sum(out, axis=tuple(range(1, out.ndim)))
+            assert out.shape == (N_pix,)
+            return out if k_mtm == 0 else out.reshape(n_pix, k_mtm)
         else:
-            out = xp.sum(out)
+            if k_mtm > 0:
+                out = out.reshape(n_pix, k_mtm, *out.shape[1:])
+            return xp.sum(out) if k_mtm == 0 else out.swapaxes(0, 1).sum(axis=tuple(range(1, out.ndim)))
         
-        return out
     
     def evaluate_all_nlpdf_utils(
         self,
@@ -165,12 +217,15 @@ class AuxiliaryGivenTarget(Likelihood, Hierarchical): #TODO: check is Likelihood
         # TODO: implement this method
         shape_var = current[self.var_name]['var'].shape
         assert isinstance(mtm, bool), f"mtm should be a boolean, got {type(mtm)}"
-
+        
         self.nlpdf_utils = dict()
         self.nlpdf_utils["mtm"] = mtm
 
         self.nlpdf_utils["aux"] = current[self.var_names_dict['aux']]['var']
+        if idx_pix is not None:
+            self.nlpdf_utils["aux"] = self.nlpdf_utils["aux"][idx_pix]
         self.nlpdf_utils["log_aux"] = xp.log(self.nlpdf_utils["aux"])
+
 
         forward_var_inputs = current[self.var_names_dict['target']]['var']
         if idx_pix is not None:
@@ -218,7 +273,7 @@ class ObservationsGivenAuxiliary(Likelihood):
         sigma_m: Union[float, xp.ndarray],
         omega: xp.ndarray,
     ) -> None:
-        super().__init__(D, L, N)
+        super().__init__(forward_map=None, D=D, L=L, N=N)
 
         if not (y.shape == (N, L)):
             raise ValueError(

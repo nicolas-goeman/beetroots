@@ -26,7 +26,7 @@ from beetroots.space_transform.transform import MyScaler
 
 import importlib
 
-class SimulationMyGibbsSampler(SimulationTargetDistributionType):
+class SimulationHierarchical(SimulationTargetDistributionType):
     def setup_target_distribution(
         self,
         scaler,
@@ -39,43 +39,64 @@ class SimulationMyGibbsSampler(SimulationTargetDistributionType):
         params_component_distributions: dict[str, dict],
         dict_target_distributions_to_components: dict[str, list],
     ) -> None:
-        
+        component_distributions_names = params_component_distributions.keys()
         component_distributions = dict()
-        dict_shape_problem = {"D": self.D, "L": self.L, "N": self.N}
 
+        if "theta_indicator_prior" in component_distributions_names:
+            dic = params_component_distributions["theta_indicator_prior"]
+            module_ = importlib.import_module(dic['module'])
+            class_ = getattr(module_, dic['class_name'])
+            kwargs = dic['params']
+            lower_bounds_lin = np.array(kwargs['lower_bounds_lin']) # Linear space
+            upper_bounds_lin = np.array(kwargs['upper_bounds_lin']) # Linear space
+
+            kwargs.update({"D": self.D_sampling, "L": self.L, "N": self.N, "list_idx_sampling": self.list_idx_sampling})
+
+            if dic['do_scaling']:
+                lower_bounds = scaler.from_lin_to_scaled(
+                    lower_bounds_lin.reshape((1, self.D)),
+                ).flatten()
+                upper_bounds = scaler.from_lin_to_scaled(
+                    upper_bounds_lin.reshape((1, self.D)),
+                ).flatten()
+            kwargs['lower_bounds'] = lower_bounds
+            kwargs['upper_bounds'] = upper_bounds
+
+            component_distributions["theta_indicator_prior"] = class_(**kwargs)
+        else: 
+            raise ValueError("'theta_indicator_prior' must be a component distribution")
+        
+        if "theta_spatial_prior" in component_distributions_names:
+            dic = params_component_distributions["theta_spatial_prior"]
+            module_ = importlib.import_module(dic['module'])
+            class_ = getattr(module_, dic['class_name'])
+            kwargs = dic['params']
+            kwargs['cloud_name'] = self.cloud_name
+            kwargs['list_idx_sampling'] = self.list_idx_sampling
+            kwargs['df'] = syn_map
+            component_distributions["theta_spatial_prior"] = class_(**kwargs)
+        
         for component_name, dic in component_distributions.items():
             module_ = importlib.import_module(dic['module'])
             class_ = getattr(module_, dic['class_name'])
             kwargs = dic['params']
-            kwargs.update(dict_shape_problem) # Will not be used by all component distributions
+            # kwargs.update(dict_shape_problem) # Will not be used by all component distributions
+            if 'lower_bounds_lin' in kwargs.keys():
+                lower_bounds = np.array(kwargs['lower_bounds_lin']) # Linear space
+                upper_bounds = np.array(kwargs['upper_bounds_lin']) # Linear space
+                if dic['do_scaling']:
+                    lower_bounds = scaler.from_lin_to_scaled(
+                        lower_bounds.reshape((1, self.D)),
+                    ).flatten()
+                    upper_bounds = scaler.from_lin_to_scaled(
+                        upper_bounds.reshape((1, self.D)),
+                    ).flatten()
+                kwargs['lower_bounds'] = lower_bounds
+                kwargs['upper_bounds'] = upper_bounds
 
+            component_distributions[component_name] = class_(**kwargs)
 
-
-            
-            self.proposal_distributions_mtm[key] = class_(**kwargs)
-
-        # indicator prior
-        if isinstance(lower_bounds_lin, list):
-            lower_bounds_lin = np.array(lower_bounds_lin)
-        if isinstance(upper_bounds_lin, list):
-            upper_bounds_lin = np.array(upper_bounds_lin)
-
-        lower_bounds = scaler.from_lin_to_scaled(
-            lower_bounds_lin.reshape((1, self.D)),
-        ).flatten()
-        upper_bounds = scaler.from_lin_to_scaled(
-            upper_bounds_lin.reshape((1, self.D)),
-        ).flatten()
         
-        prior_indicator = SmoothIndicatorPrior(
-            self.D_sampling,
-            self.N,
-            indicator_margin_scale,
-            lower_bounds,
-            upper_bounds,
-            list_idx_sampling=self.list_idx_sampling,
-        )
-
         # likelihood
         target_distributions = {}
         for i, (target_dist_name, dict_params_component_dists) in enumerate(params_target_distributions.items()):

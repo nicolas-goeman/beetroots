@@ -573,7 +573,7 @@ class MixingModelsLikelihood(Likelihood):
 
         Returns
         -------
-        np.ndarray of shape (N, D, L)
+        np.ndarray of shape (N, D)
             [description]
         """
         grad_ = np.where(
@@ -600,7 +600,7 @@ class MixingModelsLikelihood(Likelihood):
         if self.nlpdf_utils['k_mtm'] > 0:
             grad_ = grad_.reshape((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.D, self.L))
         
-        return np.sum(grad_, axis=-1)  # / (self.N * self.L)
+        return np.sum(grad_, axis=-1)  # / (self.N * self.L) 
 
     def gradient_neglog_pdf_ac(
         self,
@@ -683,7 +683,7 @@ class MixingModelsLikelihood(Likelihood):
 
         Returns
         -------
-        np.ndarray of shape (N, D, L)
+        np.ndarray of shape (N, D)
             [description]
         """
         hess_diag = np.where(
@@ -716,7 +716,7 @@ class MixingModelsLikelihood(Likelihood):
         if self.nlpdf_utils['k_mtm'] > 0:
             hess_diag = hess_diag.reshape((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.D, self.L))
 
-        return np.sum(hess_diag, axis=-1)  # / (self.N * self.L)
+        return np.sum(hess_diag, axis=-1)  # / (self.N * self.L). Output of shape (N, D) or (N, k_mtm, D)
 
     def hess_diag_neglog_pdf_ac(
         self,

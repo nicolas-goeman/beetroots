@@ -486,15 +486,16 @@ class MyGibbsSampler(Sampler):
         # n_sites = len(posterior.dict_sites)
         # idx_site = int(self.rng.integers(0, n_sites))
 
+        grad_idx, hess_diag_idx = None, None
         # TODO: generalize the use of dict_sites to all variables. Is it always present in the target_distribution?
         list_idx = xp.array(list(target_distribution.dict_sites.keys()))
 
-        for idx_site in list_idx:
+        for i, idx_site in enumerate(list_idx):
             idx_pix = target_distribution.dict_sites[idx_site]
             n_pix = idx_pix.size
 
             # --- PROPOSAL STEP ---
-            grad_t = self.current[key]["grad"][idx_pix, :] * 1
+            grad_t = grad_idx if i>0 else self.current[key]["grad"][idx_pix, :] * 1 
             v_current = self.v[key].reshape(new_var.shape)[idx_pix, :] * 1
 
             # generate random
@@ -510,7 +511,7 @@ class MyGibbsSampler(Sampler):
 
             # bias correction term
             if self.compute_correction_term:
-                hess_diag_t = self.current[key]["hess_diag"][idx_pix, :] * 1
+                hess_diag_t = hess_diag_idx if i>0 else self.current[key]["hess_diag"][idx_pix, :] * 1
                 j_t = self.j_t[key].reshape(new_var.shape)[idx_pix, :] * 1
 
                 correction = (
@@ -543,7 +544,7 @@ class MyGibbsSampler(Sampler):
             log_q_candidate_given_current = -1 / 2 * xp.sum(
                 xp.log(diag_G_t), axis=1
             ) - 1 / (2 * self.eps0[key]) * xp.sum(
-                (candidate - mu_current) ** 2 / diag_G_t, axis=1
+                (candidate - mu_current) ** 2 / diag_G_t, axis=1 
             )  # (n_pix,)
 
             shape_q = log_q_candidate_given_current.shape
@@ -559,7 +560,7 @@ class MyGibbsSampler(Sampler):
             nlpdf = target_distribution.neglog_pdf(full=True, update_nlpdf_utils=False)
             candidate_all['objective_pix'] = nlpdf.sum(axis=tuple(range(1, nlpdf.ndim))) # (n_pix,)
             candidate_all['grad'] = target_distribution.grad_neglog_pdf(update_nlpdf_utils=False) # (N, D)
-            candidate_all['hess_diag'] = target_distribution.hess_diag_neglog_pdf(update_nlpdf_utils=False) # (N, D)
+            candidate_all["hess_diag"] = target_distribution.hess_diag_neglog_pdf(update_nlpdf_utils=False) if self.compute_correction_term else None# (N, D)
 
             grad_cand = candidate_all["grad"] * 1
             v_cand = (
@@ -637,13 +638,18 @@ class MyGibbsSampler(Sampler):
             )
             self.j_t[key] = j.flatten()
 
-            if accept_arr.max() > 0:  # if at least one accept
-                self.current[key]['var'] = new_var * 1
+            if accept_arr.max() > 0 and i<len(list_idx)-1:  # if at least one accept and not the last site group
+                # update the current variable for the next site group
+                current_candidate[key] = {'var': new_var}
+                target_distribution.update_nlpdf_utils(current_candidate, idx_pix, compute_derivatives=True, compute_derivatives_2nd_order=self.compute_correction_term)
+                grad_idx = target_distribution.grad_neglog_pdf(update_nlpdf_utils=False) # (N, D)
+                hess_diag_idx = target_distribution.hess_diag_neglog_pdf(update_nlpdf_utils=False) if self.compute_correction_term else None # (N, D)
 
-                self.current[key] = target_distribution.compute_all(
-                    self.current,
-                    compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
-                ) # TODO: check if could do it with the indices idx_pix and the neglof_pdf, grad_neglog_pdf and hess_diag_neglog_pdf methods directly to save computations.
+        self.current[key]['var'] = new_var * 1
+        self.current[key] = target_distribution.compute_all(
+            self.current,
+            compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
+        ) # TODO: check if could do it with the indices idx_pix and the neglof_pdf, grad_neglog_pdf and hess_diag_neglog_pdf methods directly to save computations. It should be possible but the problem is for the first iteation. We can maybe initialize them at the first iteration of idx_pix.
 
         # after loop
         return accept_total.mean(), log_proba_accept_total.mean()

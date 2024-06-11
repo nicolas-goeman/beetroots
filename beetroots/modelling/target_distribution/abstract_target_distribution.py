@@ -66,6 +66,9 @@ class TargetDistribution(ABC):
         pixelwise: bool = False,
         update_nlpdf_utils: bool = True,
     ) -> float:
+        """
+        Should output something 
+        """
         pass # NOTE: when calling update_nlpdf_utils (when it is true), it should (in general) deactivate the the computation of the utils for the derivatives to avoid unecessary computations.
 
     @abstractmethod
@@ -161,6 +164,8 @@ class TargetDistribution(ABC):
         mtm : bool, optional    
             whether to use the MTM, by default False
         """
+        self.mtm = mtm
+        
         for cd in self.distribution_components.values():
             cd.evaluate_all_nlpdf_utils(current, idx_pix, compute_derivatives, compute_derivatives_2nd_order, mtm, **kwargs)
 
