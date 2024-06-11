@@ -105,33 +105,34 @@ class L22LaplacianSpatialPrior(SpatialPrior):
         self,
         with_weights: bool = True,
         pixelwise: bool = False,
+        paramwise: bool = False,
+        full: bool = False,
     ) -> xp.ndarray:
         k_mtm = self.nlpdf_utils['k_mtm']
         n_pix = self.nlpdf_utils['n_pix']
+        
+        assert xp.sum([pixelwise, paramwise, full]) == 1
 
-        if pixelwise:
-            neglog_p = xp.zeros((n_pix, self.D)) if k_mtm == 0 else xp.zeros((n_pix, k_mtm, self.D))
-        else:
-            neglog_p = xp.zeros((self.D)) if k_mtm == 0 else xp.zeros((k_mtm, self.D))
+        neglog_p = xp.zeros((n_pix, k_mtm, self.D)) if k_mtm > 0 else xp.zeros((n_pix, self.D))
 
         if self.list_edges.size > 0:
             laplacian_ = self.nlpdf_utils['laplacian_local'] * 1
-            if pixelwise:
-                neglog_p += laplacian_**2  # (N,D)
-            else:
-                neglog_p += xp.sum(laplacian_**2, axis=0)  # (D,) or (k_mtm, D)
+            neglog_p += laplacian_**2  # (n_pix,D)
 
         if with_weights:
-            if pixelwise:
-                if k_mtm == 0:
-                    neglog_p *= self.weights[None, :]
-                else:
-                    neglog_p *= self.weights[None, None, :]
+            if k_mtm == 0:
+                neglog_p *= self.weights[None, :]
             else:
-                if k_mtm == 0:
-                    neglog_p *= self.weights
-                else:
-                    neglog_p *= self.weights[None, :]
+                neglog_p *= self.weights[None, None, :]
+        
+        if full:
+            return neglog_p  # (n_pix, D) or (n_pix, k_mtm, D)
+        elif pixelwise:
+            neglog_p = neglog_p.sum(axis=tuple(range(1, neglog_p.ndim))) if k_mtm == 0 else neglog_p.sum(axis=tuple(range(2, neglog_p.ndim)))
+        elif paramwise:
+            neglog_p = neglog_p.sum(axis=0) if k_mtm == 0 else neglog_p.sum(axis=(0, 1))
+        else:
+            neglog_p = neglog_p.sum() if k_mtm == 0 else neglog_p.swapaxes(0, 1).sum(axis=tuple(range(1, neglog_p.ndim)))
 
         # neglog_p /= self.N * self.D
         return neglog_p  # (n_pix, k_mtm, D,) or (n_pix, D) or (D,) or (k_mtm, D) depending on the values of pixelwise and k_mtm
@@ -174,7 +175,7 @@ class L22LaplacianSpatialPrior(SpatialPrior):
         ) -> None:
         """Evaluate all utilities for the negative log-pdf and its eventual derivatives"""
 
-        Var = current[self.var_name]["var"]
+        Var = current[self.var_name]["var"] # Should be of full size N not n_pix as in spatial prior there are dependencies between pixels from different idx_pix.
 
         assert Var.shape[0] == self.N
         assert Var.shape[-1]==self.D
