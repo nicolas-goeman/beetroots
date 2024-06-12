@@ -84,7 +84,7 @@ class SimulationToyCaseNN(SimulationNN, SimulationToyCase, SimulationMySampler):
         )
 
         # run setup
-        dict_posteriors, scaler, prior_indicator_1pix = self.setup_target_distribution(
+        dict_posteriors, scaler, prior_indicator_1pix, params_plot_setup = self.setup_target_distribution(
             scaler=scaler,
             forward_map=forward_map,
             y=y,
@@ -112,6 +112,7 @@ class SimulationToyCaseNN(SimulationNN, SimulationToyCase, SimulationMySampler):
             y_valid,
             sigma_a_valid,
             omega_valid,
+            params_plot_setup,
         )
 
     def main(self, params: dict, path_data_cloud: str) -> None:
@@ -129,6 +130,7 @@ class SimulationToyCaseNN(SimulationNN, SimulationToyCase, SimulationMySampler):
             y_valid,  # None
             sigma_a_valid,  # None
             omega_valid,  # None
+            params_plot_setup
         ) = simulation.setup(
             **params["forward_model"],
             #
@@ -148,9 +150,7 @@ class SimulationToyCaseNN(SimulationNN, SimulationToyCase, SimulationMySampler):
             ],
         )
         simulation.save_and_plot_setup(
-            dict_posteriors,
-            params["prior_indicator"]["lower_bounds_lin"],
-            params["prior_indicator"]["upper_bounds_lin"],
+            **params_plot_setup,
             scaler,
         )
         # * Optim MAP

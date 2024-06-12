@@ -156,7 +156,17 @@ class SimulationMySampler(SimulationTargetDistributionType):
             )
             dict_posteriors[model_name] = posterior_censor
 
-        return dict_posteriors, scaler, prior_indicator_1pix
+        
+        params_plot_setup = {
+            "dict_sites_": dict_posteriors[list(dict_posteriors.keys())[0]].dict_sites, # We don't care about which Posterior (first one here) as they all share the same dict_sites
+            "y": y*1,
+            "sigma_a": sigma_a*1,
+            "omega": omega*1,
+            "lower_bounds_lin": lower_bounds_lin,
+            "upper_bounds_lin": upper_bounds_lin,
+        }
+
+        return dict_posteriors, scaler, prior_indicator_1pix, params_plot_setup
 
     def inversion_optim_mle(self):
         pass

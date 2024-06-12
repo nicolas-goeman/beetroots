@@ -1,7 +1,10 @@
 import time
 from typing import Dict, List, Optional, Union
 
-import numpy as np
+try:
+    import cupy as xp
+except:
+    import numpy as xp
 
 from beetroots.inversion.results.results_mcmc import ResultsExtractorMCMC
 from beetroots.inversion.results.results_optim_map import ResultsExtractorOptimMAP
@@ -37,8 +40,9 @@ class SimulationHierarchical(SimulationTargetDistributionType):
         omega,
         syn_map,
         params_component_distributions: dict[str, dict],
-        dict_target_distributions_to_components: dict[str, list],
+        dict_target_distributions_match_components: dict[str, list],
     ) -> None:
+        # component distributions
         component_distributions_names = params_component_distributions.keys()
         component_distributions = dict()
 
@@ -47,8 +51,8 @@ class SimulationHierarchical(SimulationTargetDistributionType):
             module_ = importlib.import_module(dic['module'])
             class_ = getattr(module_, dic['class_name'])
             kwargs = dic['params']
-            lower_bounds_lin = np.array(kwargs['lower_bounds_lin']) # Linear space
-            upper_bounds_lin = np.array(kwargs['upper_bounds_lin']) # Linear space
+            lower_bounds_lin = xp.array(kwargs['lower_bounds_lin']) # Linear space
+            upper_bounds_lin = xp.array(kwargs['upper_bounds_lin']) # Linear space
 
             kwargs.update({"D": self.D_sampling, "L": self.L, "N": self.N, "list_idx_sampling": self.list_idx_sampling})
 
@@ -75,82 +79,68 @@ class SimulationHierarchical(SimulationTargetDistributionType):
             kwargs['list_idx_sampling'] = self.list_idx_sampling
             kwargs['df'] = syn_map
             component_distributions["theta_spatial_prior"] = class_(**kwargs)
+
+            dict_sites = component_distributions["theta_spatial_prior"].dict_sites
+        else:
+            dict_sites = None
+            raise Warning("no spatial prior for theta will be used as no component distribution with the key 'theta_spatial_prior' has been provided.")
         
-        for component_name, dic in component_distributions.items():
+        if "aux_given_theta" in component_distributions_names:
+            dic = params_component_distributions["aux_given_theta"]
             module_ = importlib.import_module(dic['module'])
             class_ = getattr(module_, dic['class_name'])
             kwargs = dic['params']
-            # kwargs.update(dict_shape_problem) # Will not be used by all component distributions
-            if 'lower_bounds_lin' in kwargs.keys():
-                lower_bounds = np.array(kwargs['lower_bounds_lin']) # Linear space
-                upper_bounds = np.array(kwargs['upper_bounds_lin']) # Linear space
-                if dic['do_scaling']:
-                    lower_bounds = scaler.from_lin_to_scaled(
-                        lower_bounds.reshape((1, self.D)),
-                    ).flatten()
-                    upper_bounds = scaler.from_lin_to_scaled(
-                        upper_bounds.reshape((1, self.D)),
-                    ).flatten()
-                kwargs['lower_bounds'] = lower_bounds
-                kwargs['upper_bounds'] = upper_bounds
+            kwargs['forward_map'] = forward_map
+            kwargs['D'] = self.D_sampling
+            kwargs['L'] = self.L
+            kwargs['N'] = self.N
 
-            component_distributions[component_name] = class_(**kwargs)
-
+            component_distributions["aux_given_theta"] = class_(**kwargs)
+        else:
+            raise ValueError("'aux_given_theta' must be a component distribution")
         
-        # likelihood
-        target_distributions = {}
-        for i, (target_dist_name, dict_params_component_dists) in enumerate(params_target_distributions.items()):
-            component_distributions = []
-            for j, (component_dist_name, dict_params) in enumerate(dict_params_component_dists.items()):
+        if "obs_given_aux" in component_distributions_names:
+            dic = params_component_distributions["obs_given_aux"]
+            module_ = importlib.import_module(dic['module'])
+            class_ = getattr(module_, dic['class_name'])
+            kwargs = dic['params']
+            kwargs['y'] = y
+            kwargs['sigma_a'] = sigma_a
+            kwargs['sigma_m'] = sigma_m
+            kwargs['omega'] = omega
+            kwargs['D'] = self.D_sampling
+            kwargs['L'] = self.L
+            kwargs['N'] = self.N
+            component_distributions["obs_given_aux"] = class_(**kwargs)
+        else:
+            raise ValueError("'obs_given_aux' must be a component distribution")
                 
-                class_ = importlib.import_module('beetroots.modelling.'+dict_params['module'], dict_params['class_name'])
-                component_distributions.append(class_(**dict_params['params']))
-
-                target_distribution = FullConditional(
-                    **dict_params_target,
+        # target distributions
+        target_distributions = {}
+        for i, (target_dist_name, list_component_dists) in enumerate(dict_target_distributions_match_components.items()):
+            component_distributions = [component_distributions[component_dist_name] for component_dist_name in list_component_dists]
+            target_distribution = FullConditional(
+                    D=self.D_sampling,
+                    L=self.L,
+                    N=self.N,
+                    distribution_components=component_distributions,
+                    var_name=target_dist_name,
+                    dict_sites=dict_sites,
                 )
-                target_distributions[target_dist_name] = target_distribution
+            target_distributions[target_dist_name] = target_distribution
 
-        for is_raw in list_gaussian_approx_params:
-            name = "raw" if is_raw else "transformed"
-            model_name = f"gaussian_approx_{name}"
+        dict_models = {"hierarchical_aux_theta": target_distributions} # We could instantiate several versions of the problem (different hyperparams for example similarly to the posterior model with the approximation) 
 
-            if is_raw:
-                m_a = np.zeros((self.N, self.L))
-                s_a = sigma_a * 1
-            else:
-                m_a = 0  # (np.exp(sigma_m**2 / 2) - 1) * y
-                s_a = np.sqrt(
-                    y**2
-                    # * np.exp(sigma_m**2)
-                    * (np.exp(sigma_m**2) - 1)
-                    + sigma_a**2
-                )
+        params_plot_setup = {
+            "dict_sites_": dict_sites,
+            "y": y*1,
+            "sigma_a": sigma_a*1,
+            "omega": omega*1,
+            "lower_bounds_lin": lower_bounds_lin,
+            "upper_bounds_lin": upper_bounds_lin,
+        }
 
-            likelihood_censor = CensoredGaussianLikelihood(
-                forward_map,
-                self.D_sampling,
-                self.L,
-                self.N,
-                y,
-                s_a,
-                omega,
-                bias=m_a,
-            )
-            # separable+True: if no spatial prior, still possible to run
-            # chromatic Gibbs on MTM
-            posterior_censor = Posterior(
-                self.D_sampling,
-                self.L,
-                self.N,
-                likelihood=likelihood_censor,
-                prior_spatial=prior_spatial,
-                prior_indicator=prior_indicator,
-                separable=False,
-            )
-            dict_posteriors[model_name] = posterior_censor
-
-        return dict_posteriors, scaler, prior_indicator_1pix
+        return dict_models, scaler
 
     def inversion_optim_mle(self):
         pass
@@ -246,15 +236,15 @@ class SimulationHierarchical(SimulationTargetDistributionType):
         freq_save: int = 1,
         start_from: Optional[str] = None,
         #
-        regu_spatial_N0: Union[int, float] = np.infty,
+        regu_spatial_N0: Union[int, float] = xp.infty,
         regu_spatial_scale: Optional[float] = 1.0,
         regu_spatial_vmin: Optional[float] = 1e-8,
         regu_spatial_vmax: Optional[float] = 1e8,
         #
-        y_valid: Optional[np.ndarray] = None,
-        sigma_a_valid: Optional[np.ndarray] = None,
-        omega_valid: Optional[np.ndarray] = None,
-        sigma_m_valid: Optional[np.ndarray] = None,
+        y_valid: Optional[xp.ndarray] = None,
+        sigma_a_valid: Optional[xp.ndarray] = None,
+        omega_valid: Optional[xp.ndarray] = None,
+        sigma_m_valid: Optional[xp.ndarray] = None,
         #
         can_run_in_parallel: bool = True,
         point_challenger: Dict = {},
@@ -323,7 +313,7 @@ class SimulationHierarchical(SimulationTargetDistributionType):
                 plot_comparisons_yspace=plot_comparisons_yspace,
                 #
                 estimator_plot=self.plots_estimator,
-                analyze_regularization_weight=np.isfinite(regu_spatial_N0),
+                analyze_regularization_weight=xp.isfinite(regu_spatial_N0),
                 list_lines_fit=self.list_lines_fit,
                 Theta_true_scaled=self.Theta_true_scaled,
                 list_lines_valid=self.list_lines_valid,

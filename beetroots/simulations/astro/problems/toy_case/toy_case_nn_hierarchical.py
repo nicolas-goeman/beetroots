@@ -9,10 +9,10 @@ from beetroots.simulations.abstract_simulation import Simulation
 from beetroots.simulations.astro import data_validation
 from beetroots.simulations.astro.forward_map_setup.abstract_nn import SimulationNN
 from beetroots.simulations.astro.observation_setup.abstract_toy_case import SimulationToyCase
-from beetroots.simulations.astro.sampler_setup.abstract_sampler_hierarchical import SimulationMyGibbsSampler
+from beetroots.simulations.astro.sampler_setup.abstract_sampler_hierarchical import SimulationHierarchical
 
 
-class SimulationToyCaseNN(SimulationNN, SimulationToyCase, SimulationMyGibbsSampler):
+class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, SimulationHierarchical):
     __slots__ = (
         "path_output_sim",
         "path_img",
@@ -49,14 +49,8 @@ class SimulationToyCaseNN(SimulationNN, SimulationToyCase, SimulationMyGibbsSamp
         sigma_m_float: float,
         omega_float: float,
         #
-        indicator_margin_scale: float,
-        lower_bounds_lin: np.ndarray,
-        upper_bounds_lin: np.ndarray,
-        #
-        with_spatial_prior: bool = True,
-        spatial_prior_params: Union[None, SpatialPriorParams] = None,
-        list_gaussian_approx_params: List[bool] = [],
-        list_mixing_model_params: List[Dict[str, str]] = [],
+        params_component_distributions,
+        dict_target_distributions_match_components,
     ):
         self.N = int(self.cloud_name.split("N")[1]) ** 2
 
@@ -82,7 +76,7 @@ class SimulationToyCaseNN(SimulationNN, SimulationToyCase, SimulationMyGibbsSamp
         )
 
         # run setup
-        dict_posteriors, scaler, prior_indicator_1pix = self.setup_target_distribution(
+        dict_models, scaler, params_plot_setup = self.setup_target_distribution(
             scaler=scaler,
             forward_map=forward_map,
             y=y,
@@ -90,43 +84,23 @@ class SimulationToyCaseNN(SimulationNN, SimulationToyCase, SimulationMyGibbsSamp
             sigma_m=sigma_m,
             omega=omega,
             syn_map=syn_map,
-            with_spatial_prior=with_spatial_prior,
-            spatial_prior_params=spatial_prior_params,
-            indicator_margin_scale=indicator_margin_scale,
-            lower_bounds_lin=lower_bounds_lin,
-            upper_bounds_lin=upper_bounds_lin,
-            list_gaussian_approx_params=list_gaussian_approx_params,
-            list_mixing_model_params=list_mixing_model_params,
+            params_component_distributions=params_component_distributions,
+            dict_target_distributions_match_components=dict_target_distributions_match_components,
         )
 
-        y_valid = None
-        sigma_a_valid = None
-        omega_valid = None
 
         return (
-            dict_posteriors,
+            dict_models,
             scaler,
-            prior_indicator_1pix,
-            y_valid,
-            sigma_a_valid,
-            omega_valid,
+            params_plot_setup,
         )
 
     def main(self, params: dict, path_data_cloud: str) -> None:
-        if params["with_spatial_prior"]:
-            spatial_prior_params = SpatialPriorParams(
-                **params["spatial_prior"],
-            )
-        else:
-            spatial_prior_params = None
 
         (
             dict_posteriors,
             scaler,
-            prior_indicator_1pix,
-            y_valid,  # None
-            sigma_a_valid,  # None
-            omega_valid,  # None
+            params_plot_setup,
         ) = simulation.setup(
             **params["forward_model"],
             #
@@ -134,12 +108,11 @@ class SimulationToyCaseNN(SimulationNN, SimulationToyCase, SimulationMyGibbsSamp
             sigma_m_float=np.log(params["sigma_m_float_linscale"]),
             omega_float=3 * params["sigma_a_float"],
             #
-            params_components = params['target_distributions'],
+            params_component_distributions=params['component_distributions'],
+            dict_target_distributions_match_components = params['target_distributions'],
         )
         simulation.save_and_plot_setup(
-            dict_posteriors,
-            params["prior_indicator"]["lower_bounds_lin"],
-            params["prior_indicator"]["upper_bounds_lin"],
+            **params_plot_setup,
             scaler,
         )
         # * Optim MAP

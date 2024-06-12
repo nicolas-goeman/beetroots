@@ -10,7 +10,7 @@ from beetroots.simulations.astro.forward_map_setup.abstract_nn import Simulation
 from beetroots.simulations.astro.observation_setup.abstract_real_data import (
     SimulationRealData,
 )
-from beetroots.simulations.astro.sampler_setup.abstract_mysampler import (
+from beetroots.simulations.astro.sampler_setup.abstract_sampler_posterior import (
     SimulationMySampler,
 )
 
@@ -88,7 +88,7 @@ class SimulationRealDataNN(SimulationNN, SimulationRealData, SimulationMySampler
         # run setup
         print(f"lower_bounds_lin = {lower_bounds_lin}")
 
-        dict_posteriors, scaler, prior_indicator_1pix = self.setup_target_distribution(
+        dict_posteriors, scaler, prior_indicator_1pix, params_plot_setup = self.setup_target_distribution(
             # always needed for astro
             scaler=scaler,
             forward_map=forward_map,
@@ -113,6 +113,7 @@ class SimulationRealDataNN(SimulationNN, SimulationRealData, SimulationMySampler
             y_valid,
             sigma_a_valid,
             omega_valid,
+            params_plot_setup
         )
 
     def main(
@@ -136,6 +137,7 @@ class SimulationRealDataNN(SimulationNN, SimulationRealData, SimulationMySampler
             y_valid,
             sigma_a_valid,
             omega_valid,
+            params_plot_setup,
         ) = self.setup(
             **params["forward_model"],
             #
@@ -154,9 +156,7 @@ class SimulationRealDataNN(SimulationNN, SimulationRealData, SimulationMySampler
             ],
         )
         self.save_and_plot_setup(
-            dict_posteriors,
-            params["prior_indicator"]["lower_bounds_lin"],
-            params["prior_indicator"]["upper_bounds_lin"],
+            **params_plot_setup,
             scaler,
         )
 
