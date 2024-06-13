@@ -12,12 +12,10 @@ class ComponentDistribution(ABC):
 
     def __init__(
         self,
-        var_name: str,
         vars_involved: Optional[Union[str, Tuple[str]]],
     ) -> None:
         self.nlpdf_utils = {}
 
-        self.var_name = var_name
         self.vars_involved = set(vars_involved)
 
     @abstractmethod

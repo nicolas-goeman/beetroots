@@ -10,7 +10,7 @@ except ImportError:
 from scipy.special import log_ndtr
 
 
-class AuxiliaryGivenTarget(Likelihood, Hierarchical): #TODO: check is Likelihood inheritance is relevant
+class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance is relevant
     r"""Class implementing the conditional distribution :math:`U|\Theta` for both full conditional distributions :math:`\pi(U|\Theta, Y)` and :math:`\pi(\Theta|U, Y)`."""
 
     def __init__(
@@ -19,18 +19,27 @@ class AuxiliaryGivenTarget(Likelihood, Hierarchical): #TODO: check is Likelihood
         D: int,
         L: int,
         N: int,
-        var_name: str,
         var_names_dict: dict,
         sigma_m: Union[float, xp.ndarray],
+        var_name: str = None,
     ) -> None:
-        super().__init__(forward_map, D, L, N, var_name, vars_involved=list(var_names_dict.values()))
+        super().__init__(var_name, vars_involved=list(var_names_dict.values()))
+
+        self.forward_map = forward_map
+        self.forward_map_evals = {}
+        '''dict: forward map evaluations (log and derivatives)'''
+
+        self.D = D
+        self.L = L
+        self.N = N
 
         if isinstance(sigma_m, (float, int)):
-            self.sigma_m = sigma_m * xp.ones((N, L))
+            self.sigma_m = sigma_m * xp.ones((self.N, self.L))
         else:
-            assert sigma_m.shape == (N, L)
+            assert sigma_m.shape == (self.N, self.L)
             self.sigma_m = sigma_m
         self.sigma_m2 = xp.square(self.sigma_m)
+        '''xp.ndarray: variance of the multiplicative noise applied to the forward map'''
 
         assert isinstance(var_names_dict, dict) and list(var_names_dict.keys()) == ["aux", "target"]
 
@@ -215,7 +224,8 @@ class AuxiliaryGivenTarget(Likelihood, Hierarchical): #TODO: check is Likelihood
         mtm: bool = False,
     ) -> dict:
         # TODO: implement this method
-        shape_var = current[self.var_name]['var'].shape
+        shape_var_aux = current[self.var_names_dict['aux']]['var'].shape
+        shape_var_target = current[self.var_names_dict['target']]['var'].shape
         assert isinstance(mtm, bool), f"mtm should be a boolean, got {type(mtm)}"
         
         self.nlpdf_utils = dict()
@@ -231,13 +241,13 @@ class AuxiliaryGivenTarget(Likelihood, Hierarchical): #TODO: check is Likelihood
         if idx_pix is not None:
             forward_var_inputs = forward_var_inputs[idx_pix]
         if mtm:
-            forward_var_inputs = forward_var_inputs.reshape(-1, *shape_var[2:])
+            forward_var_inputs = forward_var_inputs.reshape(-1, *shape_var_target[2:])
         compute_derivatives_forward = compute_derivatives and deriv_var_name == "target"
         compute_derivatives_2nd_order_forward = compute_derivatives_2nd_order and deriv_var_name == "target"
         self.evaluate_all_forward_map(forward_var_inputs, compute_derivatives=compute_derivatives_forward, compute_derivatives_2nd_order=compute_derivatives_2nd_order_forward) # TODO: put variable and other required arguments here
 
-        n_pix = idx_pix.size if idx_pix is not None else shape_var[0]
-        k_mtm = shape_var[1] if mtm else 0
+        n_pix = idx_pix.size if idx_pix is not None else shape_var_aux[0]
+        k_mtm = shape_var_aux[1] if mtm else 0
         N_pix = self.forward_map_evals["f_Var"].shape[0]
 
         if mtm:
@@ -273,18 +283,7 @@ class ObservationsGivenAuxiliary(Likelihood):
         sigma_m: Union[float, xp.ndarray],
         omega: xp.ndarray,
     ) -> None:
-        super().__init__(forward_map=None, D=D, L=L, N=N)
-
-        if not (y.shape == (N, L)):
-            raise ValueError(
-                "y must have the shape (N, L) = ({}, {}) elements".format(
-                    self.N, self.L
-                )
-            )
-        elif isinstance(y, xp.ndarray):
-            self.y = y
-        else:
-            raise ValueError("y must be an array")
+        super().__init__(forward_map=None, y=y, D=D, L=L, N=N)
         
         if isinstance(sigma_a, (float, int)):
             self.sigma_a = sigma_a * xp.ones((N, L))

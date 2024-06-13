@@ -12,9 +12,10 @@ from scipy.special import softmax
 from tqdm.auto import tqdm
 
 from beetroots.modelling.likelihoods.abstract_likelihood import Likelihood
+from beetroots.modelling.component_distribution import ComponentDistribution
 from beetroots.modelling.target_distribution.abstract_target_distribution import TargetDistribution
 from beetroots.sampler.abstract_sampler import Sampler
-from beetroots.sampler.saver.hierarchical_saver import HierarchicalSaver
+from beetroots.sampler.saver.my_gibbs_saver import HierarchicalSaver
 from beetroots.sampler.utils import utils
 from beetroots.sampler.utils.mml import EBayesMMLELogRate
 from beetroots.sampler.utils.sampler_params import MyGibbsSamplerParams
@@ -90,6 +91,11 @@ class MyGibbsSampler(Sampler):
         )
         r"""bool: wether to compute the expensive second order derivatives terms. Only true when the sampler runs a Markov chain (2nd order never used in optimization) and when the correction term denoted :math:`\gamma` is to be computed."""
 
+        self.model_checking_component_name = my_gibbs_sampler_params.model_checking_component_name
+        r"""str: name of the component to be used for model checking"""
+        self.model_checking_component = None
+        r"""ComponentDistribution: component to be used for model checking"""
+
         self.D = D
         r"""int: total number of physical parameters to reconstruct"""
         self.L = L
@@ -115,7 +121,7 @@ class MyGibbsSampler(Sampler):
     def _update_model_check_values(
         self,
         dict_model_check: dict,
-        likelihood: Likelihood,
+        likelihood: ComponentDistribution,
         nll_full: xp.ndarray,
         objective: float,
     ) -> dict:
@@ -250,6 +256,12 @@ class MyGibbsSampler(Sampler):
         """
         var_names = list(target_distributions.keys())
 
+        # gets the component distributions for model checking.
+        all_components = dict
+        for target_name in var_names:
+            all_components.update(target_distributions[target_name].distribution_components)
+        self.model_checking_component = all_components[self.model_checking_component_name]
+
         # FIXME: temporary solution for Vars_0. We should have a dict with MAP, MLE or None for each variable.
         # assert len(target_distributions) == len(Vars_0), "Vars_0 should have the same number of variables as target_distributions. If no initial value is provided for a variable it should be set to None in the Vars_0 dict."
         # assert set(target_distributions.keys()) == set(Vars_0.keys()), "Vars_0 should have the same variable names (keys of dict) as target_distributions"
@@ -266,8 +278,7 @@ class MyGibbsSampler(Sampler):
         # assert Theta_0.shape == (self.N, self.D)
 
         additional_sampling_log = {}
-        dict_objective = {}
-        nll_full = {} #TODO and #FIXME: remove in the final Gibbs sampler. Still need to find a way for the model checking.
+        dict_objective = {} #TODO and #FIXME: remove in the final Gibbs sampler. Still need to find a way for the model checking.
         for key in var_names:
             self.current[key] = target_distributions[key].compute_all(
                 self.current, compute_derivatives_2nd_order=self.compute_derivatives_2nd_order
@@ -357,6 +368,7 @@ class MyGibbsSampler(Sampler):
 
             # * if the memory is empty : initialize it
             # TODO: update this part for the Gibbs sampler. dict_objective is not correct here (only last variable). Should change the saver.
+            nll_full = xp.zeros(self.N, self.L)
             if saver.memory == {}:
                 for key in var_names:
                     additional_sampling_log[key]["v"] = self.v[key].reshape(self.current[key]["grad"].shape) * 1
@@ -364,31 +376,36 @@ class MyGibbsSampler(Sampler):
                     additional_sampling_log[key]["accepted_t"] = acceptance_stats[key]["accepted_t"]
                     additional_sampling_log[key]["log_proba_accept_t"] = acceptance_stats[key]["log_proba_accept_t"]
 
-                    dict_objective[key], nll_full[key] = target_distributions[key].compute_all_for_saver( # Update nll_full
+                    dict_objective[key], nll_full_temp = target_distributions[key].compute_all_for_saver( # Update nll_full
                         self.current,
+                        self.model_checking_component_name
                     )
+                    nll_full += nll_full_temp
 
-                # NOTE: the model_checking (as in the elif under) was also present here in the original code. I removed it from here since it will never be used in the fist iteration as the burn-in is not finished yet? Should I let it for the case where T_BI = 0?
+                if t > T_BI:
+                    dict_model_check = self._update_model_check_values(
+                        dict_model_check,
+                        self.model_checking_component,
+                        nll_full,
+                        objective=None,) # Objective is used for optimization (self.stochastic == False)
                     
                 saver.initialize_memory(
                     max_iter,
                     t,
-                    Theta=self.current[key]['var'],
-                    forward_map_evals=target_distributions[key].likelihood.forward_map_evals,
-                    nll_utils=target_distributions[key].likelihood.nlpdf_utils,
-                    dict_objective=dict_objective[key],
-                    additional_sampling_log=additional_sampling_log[key],
+                    current=self.current,
+                    nlpdf_utils=dict(), # FIXME: to change if we to store variables related to some component distributions. Previously it was used to keep track of parameters from the approximate likelihood.
+                    dict_objective=dict_objective,
+                    additional_sampling_log=additional_sampling_log,
                 )
 
                 rng_state_array, rng_inc_array = self.get_rng_state()
 
                 saver.update_memory(
                     t,
-                    Theta=self.current[key]['var'],
-                    forward_map_evals=target_distributions[key].likelihood.forward_map_evals,
-                    nll_utils=target_distributions[key].likelihood.nlpdf_utils,
-                    dict_objective=dict_objective[key],
-                    additional_sampling_log=additional_sampling_log[key],
+                    current=self.current,
+                    nlpdf_utils=dict(), # FIXME: to change if we to store variables related to some component distributions. Previously it was used to keep track of parameters from the approximate likelihood.
+                    dict_objective=dict_objective,
+                    additional_sampling_log=additional_sampling_log,
                     rng_state_array=rng_state_array,
                     rng_inc_array=rng_inc_array,
                 )
@@ -400,27 +417,28 @@ class MyGibbsSampler(Sampler):
                     additional_sampling_log[key]["accepted_t"] = acceptance_stats[key]["accepted_t"]
                     additional_sampling_log[key]["log_proba_accept_t"] = acceptance_stats[key]["log_proba_accept_t"]
 
-                    dict_objective[key], nll_full[key] = target_distributions[key].compute_all_for_saver(
+                    dict_objective[key], nll_full_temp = target_distributions[key].compute_all_for_saver(
                         self.current,
+                        self.model_checking_component_name
                     )
+                    nll_full += nll_full_temp
 
                 if t > T_BI:
                     # TODO: implement the model checking for the hierarchical approach and remove old version.
                     dict_model_check = self._update_model_check_values(
                         dict_model_check,
-                        target_distributions[key].likelihood,
-                        nll_full[key],
-                        dict_objective[key]["objective"] * 1,)
+                        self.model_checking_component,
+                        nll_full,
+                        objective=None,) # Objective is used for optimization (self.stochastic == False)
 
                 rng_state_array, rng_inc_array = self.get_rng_state()
 
                 saver.update_memory(
                     t,
-                    Theta=self.current[key]['var'],
-                    forward_map_evals=target_distributions[key].likelihood.forward_map_evals,
-                    nll_utils=target_distributions[key].likelihood.nlpdf_utils,
-                    dict_objective=dict_objective[key],
-                    additional_sampling_log=additional_sampling_log[key],
+                    current=self.current,
+                    nlpdf_utils= dict(), # FIXME: to change if we to store variables related to some component distributions. Previously it was used to keep track of parameters from the approximate likelihood.
+                    dict_objective=dict_objective,
+                    additional_sampling_log=additional_sampling_log,
                     rng_state_array=rng_state_array,
                     rng_inc_array=rng_inc_array,
                 )

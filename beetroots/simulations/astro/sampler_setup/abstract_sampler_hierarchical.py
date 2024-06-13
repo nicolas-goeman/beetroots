@@ -19,9 +19,9 @@ from beetroots.modelling.target_distribution.full_conditional import FullConditi
 from beetroots.modelling.priors.l22_laplacian_prior import L22LaplacianSpatialPrior
 from beetroots.modelling.priors.smooth_indicator_prior import SmoothIndicatorPrior
 from beetroots.modelling.priors.spatial_prior_params import SpatialPriorParams
-from beetroots.sampler.my_sampler import MySampler
+from beetroots.sampler.my_gibbs_sampler import MyGibbsSampler
 from beetroots.sampler.saver.my_saver import MySaver
-from beetroots.sampler.utils.sampler_params import MySamplerParams
+from beetroots.sampler.utils.sampler_params import MyGibbsSamplerParams
 from beetroots.simulations.astro.sampler_setup.abstract_sampler_approach import (
     SimulationTargetDistributionType,
 )
@@ -140,16 +140,16 @@ class SimulationHierarchical(SimulationTargetDistributionType):
             "upper_bounds_lin": upper_bounds_lin,
         }
 
-        return dict_models, scaler
+        return dict_models, scaler, params_plot_setup
 
     def inversion_optim_mle(self):
         pass
 
     def inversion_optim_map(
         self,
-        dict_posteriors: Dict[str, Posterior],
+        dict_models: Dict[str, Posterior],
         scaler: MyScaler,
-        my_sampler_params: MySamplerParams,
+        my_sampler_params: MyGibbsSamplerParams,
         N_MCMC: int,
         T_MC: int,
         T_BI: int,
@@ -158,9 +158,10 @@ class SimulationHierarchical(SimulationTargetDistributionType):
         start_from: Optional[str] = None,
         can_run_in_parallel: bool = True,
     ) -> None:
+        raise NotImplementedError("This method does not work currently. The optimization process for the Gibbs sampler is not implemented yet.")
         tps_init = time.time()
 
-        sampler_ = MySampler(my_sampler_params, self.D_sampling, self.L, self.N)
+        sampler_ = MyGibbsSampler(my_sampler_params, self.D_sampling, self.L, self.N)
 
         saver_ = MySaver(
             N=self.N,
@@ -175,7 +176,7 @@ class SimulationHierarchical(SimulationTargetDistributionType):
 
         run_optim_map = RunOptimMAP(self.path_data_csv_out, self.max_workers)
         run_optim_map.main(
-            dict_posteriors,
+            dict_models,
             sampler_,
             saver_,
             scaler,
@@ -197,7 +198,7 @@ class SimulationHierarchical(SimulationTargetDistributionType):
             freq_save,
             self.max_workers,
         )
-        for model_name, posterior in dict_posteriors.items():
+        for model_name, posterior in dict_models.items():
             results_optim_map.main(
                 posterior=posterior,
                 model_name=model_name,
@@ -216,14 +217,14 @@ class SimulationHierarchical(SimulationTargetDistributionType):
         msg += f"{duration_str} s\n"
         print(msg)
 
-        list_model_names = list(dict_posteriors.keys())
+        list_model_names = list(dict_models.keys())
         return list_model_names
 
     def inversion_mcmc(
         self,
-        dict_posteriors: Dict[str, Posterior],
+        dict_models: Dict[str, Posterior],
         scaler: MyScaler,
-        my_sampler_params: MySamplerParams,
+        my_sampler_params: MyGibbsSamplerParams,
         N_MCMC: int,
         T_MC: int,
         T_BI: int,
@@ -252,7 +253,7 @@ class SimulationHierarchical(SimulationTargetDistributionType):
     ) -> None:
         tps_init = time.time()
 
-        sampler_ = MySampler(my_sampler_params, self.D_sampling, self.L, self.N)
+        sampler_ = MyGibbsSampler(my_sampler_params, self.D_sampling, self.L, self.N)
 
         saver_ = MySaver(
             self.N,
@@ -267,7 +268,7 @@ class SimulationHierarchical(SimulationTargetDistributionType):
 
         run_mcmc = RunMCMC(self.path_data_csv_out, self.max_workers)
         run_mcmc.main(
-            dict_posteriors,
+            dict_models,
             sampler_,
             saver_,
             scaler,
@@ -298,7 +299,7 @@ class SimulationHierarchical(SimulationTargetDistributionType):
             freq_save,
             self.max_workers,
         )
-        for model_name, posterior in dict_posteriors.items():
+        for model_name, posterior in dict_models.items():
             results_mcmc.main(
                 posterior=posterior,
                 model_name=model_name,
@@ -331,5 +332,5 @@ class SimulationHierarchical(SimulationTargetDistributionType):
         msg += f"{duration_str} s\n"
         print(msg)
 
-        list_model_names = list(dict_posteriors.keys())
+        list_model_names = list(dict_models.keys())
         return list_model_names

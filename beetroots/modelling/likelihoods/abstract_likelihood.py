@@ -15,12 +15,12 @@ class Likelihood(ComponentDistribution):
     def __init__(
         self,
         forward_map,
+        y: xp.ndarray,
         D: int,
         L: int,
         N: int,
         var_name: str,
         vars_involved: list[str],
-        y: Optional[xp.ndarray] = None,
     ) -> None:
         self.forward_map = forward_map
         self.forward_map_evals = {}
@@ -29,6 +29,17 @@ class Likelihood(ComponentDistribution):
         self.L = L
         self.N = N
         self.y = y
+        if not (y.shape == (self.N, self.L)):
+            raise ValueError(
+                "y must have the shape (N, L) = ({}, {}) elements".format(
+                    self.N, self.L
+                )
+            )
+        elif isinstance(y, xp.ndarray):
+            self.y = y
+        else:
+            raise ValueError("y must be an array")
+        
         self.hyperparameters = None
 
         super().__init__(var_name, vars_involved)

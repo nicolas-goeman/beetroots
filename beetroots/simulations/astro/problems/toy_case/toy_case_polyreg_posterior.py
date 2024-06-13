@@ -149,6 +149,12 @@ class SimulationToyCasePolyReg(
                 for filename in params["mixing_model_params_filename"]
             ],
         )
+
+        for model_name in list(dict_posteriors.keys()):
+            folder_path = f"{self.path_raw}/{model_name}"
+            if not os.path.isdir(folder_path):
+                os.mkdir(folder_path)
+                
         simulation.save_and_plot_setup(
             **params_plot_setup,
             scaler,

@@ -76,7 +76,10 @@ component_distributions:
     module: beetroots.modelling.hierarchical.aux_var_u
     class_name: "AuxiliaryGivenTarget"
     params:
-      None: None # TODO: complete
+      var_names_dict:
+        target: 'full_conditional_theta'
+        aux: 'full_conditional_auxiliary'
+       # TODO: complete
   obs_given_aux:
     module: beetroots.modelling.hierarchical.aux_var_u
     class_name: "ObservationsGivenAuxiliary"
@@ -89,24 +92,6 @@ target_distributions:
 # 
 # sampling params
 sampling_params:
-  mle:
-    initial_step_size:  3.0e-3
-    extreme_grad: 1.0e-5
-    history_weight: 0.99
-    selection_probas: [0.2, 0.8] # (p_mtm, p_pmala)
-    k_mtm: 250
-    is_stochastic: false
-    compute_correction_term: false
-  map:
-    initial_step_size:  1.0e-3
-    extreme_grad: 1.0e-5
-    history_weight: 0.99
-    selection_probas:
-      full_conditional_theta: [0.2, 0.8] # (p_mtm, p_pmala)
-      full_conditional_auxiliary: [0.2, 0.8] # (p_mtm, p_pmala)
-    k_mtm: 250
-    is_stochastic: false
-    compute_correction_term: false
   mcmc:
     initial_step_size:  5.0e-4
     extreme_grad: 1.0e-5
@@ -115,16 +100,10 @@ sampling_params:
     k_mtm: 100
     is_stochastic: true
     compute_correction_term: false
+    model_checking_component_names: "obs_given_aux"
 #
 # run params
 run_params:
-  map:
-    N_MCMC: 1
-    T_MC: 2000
-    T_BI: 100
-    batch_size: 20
-    freq_save: 1
-    start_from: null
   mcmc:
     N_MCMC: 1
     T_MC: 200 #3_000

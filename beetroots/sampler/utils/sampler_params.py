@@ -103,6 +103,7 @@ class MyGibbsSamplerParams(object):
         proposal_distributions_mtm_params: dict[str],
         is_stochastic: bool = True,
         compute_correction_term: Union[dict[bool], bool] = True,
+        model_checking_component_name: str = None,
     ) -> None:
         r"""
 
@@ -124,7 +125,12 @@ class MyGibbsSamplerParams(object):
             wether or not to use the correction term (denoted :math:`\gamma` in the article) during the sampling (only used if `is_stochastic=True`), by default True,
         generate_function: str
             name of the function to generate the random start in the MTM kernel.
+        proposal_distributions_mtm_params : dict[str]
+            dictionary containing the parameters of the proposal distributions used in the MTM kernel
+        model_checking_component_names : List[str]
+            list of the names of the components that form the likelihood for the model checking process
         **kwargs : dict
+
         """
         # CHECK CONDITIONS
         assert isinstance(initial_step_size, dict) or isinstance(initial_step_size, float)
@@ -169,6 +175,8 @@ class MyGibbsSamplerParams(object):
 
         assert isinstance(compute_correction_term, bool)
 
+        assert isinstance(model_checking_component_name, str)
+
         self.initial_step_size = initial_step_size
         self.extreme_grad = extreme_grad
         self.history_weight = history_weight
@@ -187,3 +195,5 @@ class MyGibbsSamplerParams(object):
             class_ = getattr(module_, dict_target['class_name'])
             kwargs = dict_target['params']
             self.proposal_distributions_mtm[key] = class_(**kwargs)
+
+        self.model_checking_component_name = model_checking_component_name

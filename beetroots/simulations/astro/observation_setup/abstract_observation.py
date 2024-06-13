@@ -17,29 +17,15 @@ class SimulationObservation(AstroSimulation, abc.ABC):
 
     def save_and_plot_setup(
         self,
-        dict_posteriors: dict,
+        dict_sites_: dict,
+        y : np.ndarray,
+        sigma_a: np.ndarray,
+        omega: np.ndarray,
         lower_bounds_lin: np.ndarray,
         upper_bounds_lin: np.ndarray,
         scaler: Scaler,
     ):
-        for model_name in list(dict_posteriors.keys()):
-            folder_path = f"{self.path_raw}/{model_name}"
-            if not os.path.isdir(folder_path):
-                os.mkdir(folder_path)
-
         if self.N > 1:
-            key = list(dict_posteriors.keys())[0]
-            if isinstance(dict_posteriors[key], list):
-                dict_sites_ = dict_posteriors[key][1].dict_sites
-                y = dict_posteriors[key][0].likelihood.y * 1
-                sigma_a = dict_posteriors[key][0].likelihood.sigma * 1
-                omega = dict_posteriors[key][0].likelihood.omega * 1
-
-            else:
-                dict_sites_ = dict_posteriors[key].dict_sites
-                y = dict_posteriors[key].likelihood.y * 1
-                sigma_a = dict_posteriors[key].likelihood.sigma_a * 1
-                omega = dict_posteriors[key].likelihood.omega * 1
 
             Plots2DSetup(
                 self.path_img,

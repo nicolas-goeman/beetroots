@@ -2,7 +2,8 @@ from abc import ABC, abstractmethod
 from typing import Dict, Optional, Tuple, Union
 
 from beetroots.modelling.target_distribution.abstract_target_distribution import TargetDistribution
-
+from beetroots.modelling.component_distribution import ComponentDistribution
+from beetroots.modelling.priors.abstract_prior import PriorProbaDistribution
 try:
     import cupy as xp
 except ImportError:
@@ -15,6 +16,9 @@ class FullConditional(TargetDistribution):
         "D",
         "L",
         "N",
+        "distribution_components",
+        "var_name",
+        "dict_sites",
     )
 
     def __init__(
@@ -22,7 +26,7 @@ class FullConditional(TargetDistribution):
         D: int,
         L: int,
         N: int,
-        distribution_components: list,
+        distribution_components: dict[str, ComponentDistribution],
         var_name: str,
         separable: bool = True,
         dict_sites: Optional[Dict[int, xp.ndarray]] = None,
@@ -75,16 +79,49 @@ class FullConditional(TargetDistribution):
     def compute_all_for_saver(
         self,
         current: dict[str, dict],
+        model_checking_component_name: str,
         **kwargs,
     ) -> Tuple[dict[str, Union[float, xp.ndarray]], xp.ndarray]:
-        pass
+        assert xp.sum(xp.isnan(current[self.var_name]["var"])) == 0, xp.sum(xp.isnan(current[self.var_name]["var"]))
+        
+        dict_objective = dict()
+        posterior_nlpdf = 0.
+        nll_full = xp.zeros((self.N, self.L))
+        for component_name, component in self.distribution_components.items():
+            if isinstance(component, PriorProbaDistribution):
+                nll_comp = component.neglog_pdf(paramwise=True)
+                nll_comp_float = nll_comp.sum()
+                dict_objective["nlpdf_"+component_name] =  nll_comp_float # float
+                posterior_nlpdf += nll_comp_float
+            elif component_name == model_checking_component_name:
+                nlpdf_comp = component.neglog_pdf(full=True)
+                assert isinstance(
+                    nlpdf_comp, xp.ndarray
+                ), "nlpdf_comp shoud be an array, check likelihood.neglog_pdf method"
+                assert nlpdf_comp.shape == (
+                    self.N,
+                    self.L,
+                ), f"nlpdf_comp with wrong shape. is {nlpdf_comp.shape}, should be {(self.N, self.L)}"
+                nll_full += nlpdf_comp
+                nlpdf_comp_float = nlpdf_comp.sum()
+                dict_objective["nlpdf_"+component_name] = nlpdf_comp_float
+                posterior_nlpdf += nlpdf_comp_float
+            else:
+                nll_comp = component.neglog_pdf()
+                dict_objective["nlpdf_"+component_name] = nll_comp
+                posterior_nlpdf += nll_comp
+
+        dict_objective["objective"] = posterior_nlpdf
+
+        return dict_objective, nll_full
 
     @abstractmethod
     def compute_all(
         self,
-        current_sampler,
+        current: dict[str, Union[dict, float, xp.ndarray]]=None,
         compute_derivatives: bool = True,
         compute_derivatives_2nd_order: bool = True,
+        update_nlpdf_utils: bool = True,
     ) -> dict:
         r"""compute negative log pdf and derivatives of the target distribution
 
@@ -102,7 +139,32 @@ class FullConditional(TargetDistribution):
         dict[str, Union[float, np.ndarray]]
             negative log pdf and derivatives of the posterior distribution
         """
-        pass
+        assert xp.sum(xp.isnan(current[self.var_name]["var"])) == 0, xp.sum(xp.isnan(current[self.var_name]["var"]))
+
+        if update_nlpdf_utils:
+            self.update_nlpdf_utils(current, compute_derivatives=compute_derivatives, compute_derivatives_2nd_order=compute_derivatives_2nd_order)
+
+        nlpdf_utils, iterate = dict(), dict()
+        objective_pix = xp.zeros(self.N)
+        for component_name, component in self.distribution_components.items():
+            nlpdf_comp_pixelwise = component.neglog_pdf(pixelwise=True)
+            objective_pix += nlpdf_comp_pixelwise
+            nlpdf_utils['nlpdf_'+component_name] = nlpdf_comp_pixelwise.sum()
+            if hasattr(component, 'forward_map'):
+                iterate['forward_map_evals_'+component_name] = component.forward_map_evals
+
+        iterate['var'] = current[self.var_name]["var"],
+        iterate["nlpdf_utils"] = nlpdf_utils,
+        iterate["objective_pix"] = objective_pix,
+        iterate["objective"] = objective_pix.sum()
+
+        if compute_derivatives:
+            iterate["grad"] = self.grad_neglog_pdf(update_nlpdf_utils=False)
+            if compute_derivatives_2nd_order:
+                iterate["hess_diag"] = self.hess_diag_neglog_pdf(update_nlpdf_utils=False)
+
+        return iterate
+
 
     def update_nlpdf_utils(
         self,

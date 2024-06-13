@@ -98,7 +98,7 @@ class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, Simulation
     def main(self, params: dict, path_data_cloud: str) -> None:
 
         (
-            dict_posteriors,
+            dict_models,
             scaler,
             params_plot_setup,
         ) = simulation.setup(
@@ -111,6 +111,12 @@ class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, Simulation
             params_component_distributions=params['component_distributions'],
             dict_target_distributions_match_components = params['target_distributions'],
         )
+
+        for model_name in list(dict_models.keys()):
+            folder_path = f"{self.path_raw}/{model_name}"
+            if not os.path.isdir(folder_path):
+                os.mkdir(folder_path)
+
         simulation.save_and_plot_setup(
             **params_plot_setup,
             scaler,
@@ -118,7 +124,7 @@ class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, Simulation
         # * Optim MAP
         if params["to_run_optim_map"]:
             simulation.inversion_optim_map(
-                dict_posteriors=dict_posteriors,
+                dict_models=dict_models,
                 scaler=scaler,
                 my_sampler_params=MySamplerParams(**params["sampling_params"]["map"]),
                 can_run_in_parallel=params["forward_model"]["force_use_cpu"],
@@ -128,7 +134,7 @@ class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, Simulation
         # * MCMC
         if params["to_run_mcmc"]:
             simulation.inversion_mcmc(
-                dict_posteriors=dict_posteriors,
+                dict_models=dict_models,
                 scaler=scaler,
                 my_sampler_params=MySamplerParams(**params["sampling_params"]["mcmc"]),
                 can_run_in_parallel=params["forward_model"]["force_use_cpu"],
@@ -138,16 +144,16 @@ class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, Simulation
 
 
 if __name__ == "__main__":
-    yaml_file, path_data, path_models, path_outputs = SimulationToyCaseNN.parse_args()
+    yaml_file, path_data, path_models, path_outputs = SimulationToyCaseNNHierachical.parse_args()
 
-    params = SimulationToyCaseNN.load_params(path_data, yaml_file)
+    params = SimulationToyCaseNNHierachical.load_params(path_data, yaml_file)
 
-    SimulationToyCaseNN.check_input_params_file(
+    SimulationToyCaseNNHierachical.check_input_params_file(
         params,
         data_validation.schema_astro_hierarchical,
     )
 
-    simulation = SimulationToyCaseNN(
+    simulation = SimulationToyCaseNNHierachical(
         **params["simu_init"],
         yaml_file=yaml_file,
         path_data=path_data,

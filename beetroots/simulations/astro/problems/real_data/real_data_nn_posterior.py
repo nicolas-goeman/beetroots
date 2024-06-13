@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional, Union
 
 import numpy as np
+import os
 
 from beetroots.modelling.priors.spatial_prior_params import SpatialPriorParams
 from beetroots.sampler.utils.sampler_params import MySamplerParams
@@ -155,6 +156,12 @@ class SimulationRealDataNN(SimulationNN, SimulationRealData, SimulationMySampler
                 for filename in params["mixing_model_params_filename"]
             ],
         )
+
+        for model_name in list(dict_posteriors.keys()):
+            folder_path = f"{self.path_raw}/{model_name}"
+            if not os.path.isdir(folder_path):
+                os.mkdir(folder_path)
+
         self.save_and_plot_setup(
             **params_plot_setup,
             scaler,
