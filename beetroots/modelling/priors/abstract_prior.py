@@ -12,8 +12,8 @@ except:
 class PriorProbaDistribution(ComponentDistribution):
     r"""Abstract Base Class for a probability distribution on non-countable set"""
 
-    def __init__(self, D: int, N: int, var_name: str, **kwargs) -> None:
-        super().__init__(var_name, **kwargs)
+    def __init__(self, D: int, N: int, var_name: str = "", **kwargs) -> None:
+        super().__init__(**kwargs)
         self.D = D
         """int: number of distinct physical parameters"""
         self.N = N

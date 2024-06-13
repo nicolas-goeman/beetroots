@@ -81,6 +81,7 @@ class SpatialPrior(PriorProbaDistribution):
         N: int,
         df: pd.DataFrame,
         list_idx_sampling: List[int],
+        **kwargs,
     ) -> None:
         super().__init__(D, N)
 
@@ -172,23 +173,23 @@ class SpatialPrior(PriorProbaDistribution):
         """
         raise NotImplementedError
 
-    @abc.abstractmethod
-    def neglog_pdf_one_pix(
-        self, Var: xp.ndarray, n: int, with_weights: bool = True
-    ) -> xp.ndarray:
-        r"""computes the negative log of the pdf (defined up to some multiplicative constant) in the neighborhood of one pixel
+    # @abc.abstractmethod
+    # def neglog_pdf_one_pix(
+    #     self, Var: xp.ndarray, n: int, with_weights: bool = True
+    # ) -> xp.ndarray:
+    #     r"""computes the negative log of the pdf (defined up to some multiplicative constant) in the neighborhood of one pixel
 
-        Parameters
-        ----------
-        Var : xp.array of shape (N, D)
-            set of D maps on which we want to evaluate the neg log prior
+    #     Parameters
+    #     ----------
+    #     Var : xp.array of shape (N, D)
+    #         set of D maps on which we want to evaluate the neg log prior
 
-        Returns
-        -------
-        neglog_p : xp.array of shape (D,)
-            set of the D neg log priors evaluation
-        """
-        raise NotImplementedError
+    #     Returns
+    #     -------
+    #     neglog_p : xp.array of shape (D,)
+    #         set of the D neg log priors evaluation
+    #     """
+    #     raise NotImplementedError
 
     @abc.abstractmethod
     def gradient_neglog_pdf(self, Var: xp.ndarray) -> xp.ndarray:

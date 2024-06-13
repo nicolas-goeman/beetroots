@@ -15,7 +15,7 @@ from beetroots.modelling.likelihoods.abstract_likelihood import Likelihood
 from beetroots.modelling.component_distribution import ComponentDistribution
 from beetroots.modelling.target_distribution.abstract_target_distribution import TargetDistribution
 from beetroots.sampler.abstract_sampler import Sampler
-from beetroots.sampler.saver.my_gibbs_saver import HierarchicalSaver
+from beetroots.sampler.saver.my_gibbs_saver import MyGibbsSaver
 from beetroots.sampler.utils import utils
 from beetroots.sampler.utils.mml import EBayesMMLELogRate
 from beetroots.sampler.utils.sampler_params import MyGibbsSamplerParams
@@ -216,7 +216,7 @@ class MyGibbsSampler(Sampler):
     def sample(
         self,
         target_distributions: dict[str, TargetDistribution],
-        saver: HierarchicalSaver,
+        saver: MyGibbsSaver,
         max_iter: int,
         Vars_0: dict[str, Union[None, xp.ndarray]],
         disable_progress_bar: bool = False,
@@ -492,11 +492,7 @@ class MyGibbsSampler(Sampler):
         log_proba_accept_total = xp.zeros((self.N,))
 
         # * prepare dict with other required variables for weights computation (other variables won't change so we declare it outside)
-        names_vars_involved = target_distribution.vars_involved
-        current_candidate = {var_name: dict() for var_name in names_vars_involved}
-        for var_name in names_vars_involved:
-            if var_name != key:
-                current_candidate[var_name] = {'var': self.current[var_name]["var"]} # Add a dimension for the candidates.                
+        current_candidate = {k: {'var': self.current[k]['var']} for k in self.current.keys()}          
 
         # * define proba of changing each pixel
         # * either uniformly or depending on their respective nll
@@ -569,14 +565,13 @@ class MyGibbsSampler(Sampler):
             assert shape_q == (n_pix,), f"{shape_q}"
 
             # * compute log_q of current given candidate
-            candidate_full = new_var * 1
-            candidate_full[idx_pix, :] = mu_current * 1
+            candidate_pixel = new_var * 1
+            candidate_pixel[idx_pix, :] = mu_current * 1
 
-            current_candidate[key] = {'var': candidate_full}
+            current_candidate[key] = {'var': candidate_pixel}
             target_distribution.update_nlpdf_utils(current_candidate, idx_pix, compute_derivatives=True, compute_derivatives_2nd_order=True)
             candidate_all = {}
-            nlpdf = target_distribution.neglog_pdf(full=True, update_nlpdf_utils=False)
-            candidate_all['objective_pix'] = nlpdf.sum(axis=tuple(range(1, nlpdf.ndim))) # (n_pix,)
+            candidate_all['objective_pix'] = target_distribution.neglog_pdf(pixelwise=True, update_nlpdf_utils=False)
             candidate_all['grad'] = target_distribution.grad_neglog_pdf(update_nlpdf_utils=False) # (N, D)
             candidate_all["hess_diag"] = target_distribution.hess_diag_neglog_pdf(update_nlpdf_utils=False) if self.compute_correction_term else None# (N, D)
 
@@ -667,7 +662,7 @@ class MyGibbsSampler(Sampler):
         self.current[key] = target_distribution.compute_all(
             self.current,
             compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
-        ) # TODO: check if could do it with the indices idx_pix and the neglof_pdf, grad_neglog_pdf and hess_diag_neglog_pdf methods directly to save computations. It should be possible but the problem is for the first iteation. We can maybe initialize them at the first iteration of idx_pix.
+        )
 
         # after loop
         return accept_total.mean(), log_proba_accept_total.mean()
@@ -698,12 +693,7 @@ class MyGibbsSampler(Sampler):
         accept_total = xp.zeros((new_var.shape[0],)) # (N, ) in general
         log_rg_total = xp.zeros((new_var.shape[0],)) # (N, ) in general
 
-        # * prepare dict with other required variables for weights computation (other variables won't change so we declare it outside)
-        names_vars_involved = target_distribution.vars_involved
-        current_candidates = {var_name: dict() for var_name in names_vars_involved}
-        for var_name in names_vars_involved:
-            if var_name != key:
-                current_candidates[var_name] = {'var': xp.repeat(self.current[var_name]["var"][:, xp.newaxis, :], self.k_mtm[key] + 1, axis=1)} # Add a dimension for the candidates.                
+        current_candidates = {k: {'var': xp.repeat(self.current[k]["var"][:, xp.newaxis], self.k_mtm[key] + 1, axis=1)} for k in self.current.keys()} # Add a dimension for the candidates.                
 
         # * define proba of changing each pixel
         # * either uniformly or depending on their respective nll
@@ -730,8 +720,7 @@ class MyGibbsSampler(Sampler):
             current_candidates[key] = {'var': candidates}
             
             target_distribution.update_nlpdf_utils(current_candidates, idx_pix, compute_derivatives=False, compute_derivatives_2nd_order=False, mtm=True) # TODO: add the possibility to pass the idx_pix to the neglog_pdf method, improves the performance.
-            neglogpdf_candidates = target_distribution.neglog_pdf(full=True, update_nlpdf_utils=False) # TODO: check if the shape corresponds to the expected one # We don't call the nlpdf_utils here but above since we want to add the mtm=True argument to the update_nlpdf_utils method.
-            neglogpdf_candidates = neglogpdf_candidates.sum(axis=tuple(range(2, neglogpdf_candidates.ndim)))
+            neglogpdf_candidates = target_distribution.neglog_pdf(pixelwise=True, update_nlpdf_utils=False) # TODO: check if the shape corresponds to the expected one # We don't call the nlpdf_utils here but above since we want to add the mtm=True argument to the update_nlpdf_utils method.
             assert neglogpdf_candidates.shape == (n_pix, self.k_mtm[key] + 1,)
 
             # candidates_pix = candidates_pix.reshape((n_pix, self.k_mtm + 1, self.D))

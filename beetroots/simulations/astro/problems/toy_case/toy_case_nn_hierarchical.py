@@ -119,7 +119,7 @@ class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, Simulation
 
         simulation.save_and_plot_setup(
             **params_plot_setup,
-            scaler,
+            scaler=scaler,
         )
         # * Optim MAP
         if params["to_run_optim_map"]:

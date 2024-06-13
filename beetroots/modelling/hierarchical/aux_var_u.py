@@ -23,8 +23,7 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
         sigma_m: Union[float, xp.ndarray],
         var_name: str = None,
     ) -> None:
-        super().__init__(var_name, vars_involved=list(var_names_dict.values()))
-
+        
         self.forward_map = forward_map
         self.forward_map_evals = {}
         '''dict: forward map evaluations (log and derivatives)'''
@@ -41,7 +40,7 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
         self.sigma_m2 = xp.square(self.sigma_m)
         '''xp.ndarray: variance of the multiplicative noise applied to the forward map'''
 
-        assert isinstance(var_names_dict, dict) and list(var_names_dict.keys()) == ["aux", "target"]
+        assert isinstance(var_names_dict, dict) and set(var_names_dict.keys()) == set(["aux", "target"])
 
         self.var_names_dict = var_names_dict
 
@@ -127,7 +126,7 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
         elif deriv_var_name == self.var_names_dict["target"]:
             out = self.gradient_neglog_pdf_wrt_target()
         else:
-            raise ValueError(f"deriv_var_name must be either {self.var_names_dict["aux"]} or {self.var_names_dict["target"]}")
+            raise ValueError(f"deriv_var_name must be either {self.var_names_dict['aux']} or {self.var_names_dict['target']}")
 
         if full:
             if deriv_var_name == self.var_names_dict["aux"]:
@@ -196,7 +195,7 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
         elif deriv_var_name == self.var_names_dict["target"]:
             out = self.hess_neglog_pdf_wrt_target()
         else:
-            raise ValueError(f"deriv_var_name must be either {self.var_names_dict["aux"]} or {self.var_names_dict["target"]}")
+            raise ValueError(f"deriv_var_name must be either {self.var_names_dict['aux']} or {self.var_names_dict['target']}")
 
         if full:
             if deriv_var_name == self.var_names_dict["aux"]:
@@ -280,7 +279,6 @@ class ObservationsGivenAuxiliary(Likelihood):
         N: int,
         y: xp.ndarray,
         sigma_a: Union[float, xp.ndarray],
-        sigma_m: Union[float, xp.ndarray],
         omega: xp.ndarray,
     ) -> None:
         super().__init__(forward_map=None, y=y, D=D, L=L, N=N)
@@ -290,12 +288,6 @@ class ObservationsGivenAuxiliary(Likelihood):
         else:
             assert sigma_a.shape == (N, L)
             self.sigma_a = sigma_a
-
-        if isinstance(sigma_m, (float, int)):
-            self.sigma_m = sigma_m * xp.ones((N, L))
-        else:
-            assert sigma_m.shape == (N, L)
-            self.sigma_m = sigma_m
 
         if isinstance(omega, (float, int)):
             self.omega = omega * xp.ones((N, L))
@@ -353,7 +345,7 @@ class ObservationsGivenAuxiliary(Likelihood):
         
         return out
 
-    def grad_neglog_pdf_u(
+    def gradient_neglog_pdf_u(
         self,
         y: xp.ndarray,
     ) -> Union[float, xp.ndarray]:
@@ -364,7 +356,7 @@ class ObservationsGivenAuxiliary(Likelihood):
         
         return out
     
-    def grad_neglog_pdf_c(
+    def gradient_neglog_pdf_c(
         self,
     ) -> Union[float, xp.ndarray]:
         out = xp.zeros((self.N, self.L))
@@ -377,7 +369,7 @@ class ObservationsGivenAuxiliary(Likelihood):
 
         return out
 
-    def grad_neglog_pdf(
+    def gradient_neglog_pdf(
         self,
         pixelwise: bool = False,
         full: bool = False,
@@ -426,7 +418,7 @@ class ObservationsGivenAuxiliary(Likelihood):
 
         return out
 
-    def hess_diag_diag_neglog_pdf(
+    def hess_diag_neglog_pdf(
         self,
         pixelwise: bool = False,
         full: bool = False,

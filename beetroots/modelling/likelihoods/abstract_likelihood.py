@@ -19,8 +19,6 @@ class Likelihood(ComponentDistribution):
         D: int,
         L: int,
         N: int,
-        var_name: str,
-        vars_involved: list[str],
     ) -> None:
         self.forward_map = forward_map
         self.forward_map_evals = {}
@@ -42,7 +40,7 @@ class Likelihood(ComponentDistribution):
         
         self.hyperparameters = None
 
-        super().__init__(var_name, vars_involved)
+        super().__init__()
 
         assert y.shape == (N, L)
 

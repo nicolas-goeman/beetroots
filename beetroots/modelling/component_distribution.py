@@ -12,11 +12,12 @@ class ComponentDistribution(ABC):
 
     def __init__(
         self,
-        vars_involved: Optional[Union[str, Tuple[str]]],
+        #vars_involved: Optional[Union[str, Tuple[str]]],
+        **kwargs,
     ) -> None:
         self.nlpdf_utils = {}
 
-        self.vars_involved = set(vars_involved)
+        # self.vars_involved = set(vars_involved)
 
     @abstractmethod
     def neglog_pdf(

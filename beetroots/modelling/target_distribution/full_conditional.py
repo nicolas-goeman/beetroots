@@ -75,7 +75,6 @@ class FullConditional(TargetDistribution):
     ) -> xp.ndarray:
         pass
 
-    @abstractmethod
     def compute_all_for_saver(
         self,
         current: dict[str, dict],
@@ -115,7 +114,6 @@ class FullConditional(TargetDistribution):
 
         return dict_objective, nll_full
 
-    @abstractmethod
     def compute_all(
         self,
         current: dict[str, Union[dict, float, xp.ndarray]]=None,
@@ -145,18 +143,18 @@ class FullConditional(TargetDistribution):
             self.update_nlpdf_utils(current, compute_derivatives=compute_derivatives, compute_derivatives_2nd_order=compute_derivatives_2nd_order)
 
         nlpdf_utils, iterate = dict(), dict()
-        objective_pix = xp.zeros(self.N)
+        posterior_nlpdf_pix = xp.zeros(self.N)
         for component_name, component in self.distribution_components.items():
             nlpdf_comp_pixelwise = component.neglog_pdf(pixelwise=True)
-            objective_pix += nlpdf_comp_pixelwise
+            posterior_nlpdf_pix += nlpdf_comp_pixelwise
             nlpdf_utils['nlpdf_'+component_name] = nlpdf_comp_pixelwise.sum()
             if hasattr(component, 'forward_map'):
                 iterate['forward_map_evals_'+component_name] = component.forward_map_evals
 
         iterate['var'] = current[self.var_name]["var"],
         iterate["nlpdf_utils"] = nlpdf_utils,
-        iterate["objective_pix"] = objective_pix,
-        iterate["objective"] = objective_pix.sum()
+        iterate["objective_pix"] = posterior_nlpdf_pix,
+        iterate["objective"] = posterior_nlpdf_pix.sum()
 
         if compute_derivatives:
             iterate["grad"] = self.grad_neglog_pdf(update_nlpdf_utils=False)

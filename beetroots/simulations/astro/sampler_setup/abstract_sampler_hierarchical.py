@@ -78,6 +78,8 @@ class SimulationHierarchical(SimulationTargetDistributionType):
             kwargs['cloud_name'] = self.cloud_name
             kwargs['list_idx_sampling'] = self.list_idx_sampling
             kwargs['df'] = syn_map
+            kwargs['spatial_prior_params'] = SpatialPriorParams(kwargs['name'], kwargs['use_next_nearest_neighbors'] , kwargs['initial_regu_weights'])
+            kwargs.update({"D": self.D_sampling, "L": self.L, "N": self.N})
             component_distributions["theta_spatial_prior"] = class_(**kwargs)
 
             dict_sites = component_distributions["theta_spatial_prior"].dict_sites
@@ -91,9 +93,8 @@ class SimulationHierarchical(SimulationTargetDistributionType):
             class_ = getattr(module_, dic['class_name'])
             kwargs = dic['params']
             kwargs['forward_map'] = forward_map
-            kwargs['D'] = self.D_sampling
-            kwargs['L'] = self.L
-            kwargs['N'] = self.N
+            kwargs.update({"D": self.D_sampling, "L": self.L, "N": self.N})
+            kwargs['sigma_m'] = sigma_m
 
             component_distributions["aux_given_theta"] = class_(**kwargs)
         else:
@@ -106,11 +107,8 @@ class SimulationHierarchical(SimulationTargetDistributionType):
             kwargs = dic['params']
             kwargs['y'] = y
             kwargs['sigma_a'] = sigma_a
-            kwargs['sigma_m'] = sigma_m
             kwargs['omega'] = omega
-            kwargs['D'] = self.D_sampling
-            kwargs['L'] = self.L
-            kwargs['N'] = self.N
+            kwargs.update({"D": self.D_sampling, "L": self.L, "N": self.N})
             component_distributions["obs_given_aux"] = class_(**kwargs)
         else:
             raise ValueError("'obs_given_aux' must be a component distribution")

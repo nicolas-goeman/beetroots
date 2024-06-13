@@ -146,10 +146,9 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
         lower_bounds: xp.ndarray,
         upper_bounds: xp.ndarray,
         list_idx_sampling: List[int],
-        var_name: str,
         **kwargs
     ) -> None:
-        super().__init__(D, N, var_name, **kwargs)
+        super().__init__(D, N, **kwargs)
         self.indicator_margin_scale = indicator_margin_scale
         r"""float: scaling parameter :math:`\Delta`"""
 

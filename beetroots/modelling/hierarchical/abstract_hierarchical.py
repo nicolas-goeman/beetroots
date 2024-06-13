@@ -11,16 +11,7 @@ except ImportError:
 
 class Hierarchical(ComponentDistribution):
     r"""Abstract Base Class for a probability distribution on non-countable set"""
-
-    def __init__(
-        self,
-        var_name: str,
-        vars_involved: list[str]
-    ) -> None:
-        super().__init__(var_name, vars_involved)
-
-        self.hyperparameters = None
-
+    
     @abstractmethod
     def neglog_pdf(
         self,

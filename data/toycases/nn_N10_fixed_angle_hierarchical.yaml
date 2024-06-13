@@ -49,7 +49,7 @@ sigma_m_float_linscale: 1.1
 component_distributions:
   theta_indicator_prior:
     module: beetroots.modelling.priors.smooth_indicator_prior
-    class_name: "SmoothPriorIndicator"
+    class_name: "SmoothIndicatorPrior"
     do_scaling: True
     params:
       indicator_margin_scale: 1.0e-1
@@ -83,8 +83,7 @@ component_distributions:
   obs_given_aux:
     module: beetroots.modelling.hierarchical.aux_var_u
     class_name: "ObservationsGivenAuxiliary"
-    params:
-      None: None # TODO: complete
+    params: {}
 #  
 target_distributions:
   full_conditional_theta: ["theta_indicator_prior", "theta_spatial_prior", aux_given_theta]
