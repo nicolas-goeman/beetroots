@@ -232,7 +232,7 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
     #     )  # (N_candidates,)
     #     return neglog_p
 
-    def gradient_neglog_pdf(self,) -> xp.ndarray:
+    def gradient_neglog_pdf(self, **kwargs) -> xp.ndarray:
         r"""gradient of the negative log pdf of the smooth indicator prior
 
         Parameters
@@ -245,7 +245,7 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
         """
         return self.nlpdf_utils['grad']  # / (self.N * self.D)
 
-    def hess_diag_neglog_pdf(self,) -> xp.ndarray:
+    def hess_diag_neglog_pdf(self, **kwargs) -> xp.ndarray:
         r"""diagonal of the Hessian of the negative log pdf of the smooth indicator prior
 
         Parameters
@@ -266,7 +266,7 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
         mtm: bool = False,
         **kwargs
         ) -> None:
-        Var = current[self.var_name]["var"]
+        Var = current[self.var_name]["var"] * 1
         original_var_shape = Var.shape
 
         assert Var.shape[0] == self.N
@@ -275,25 +275,23 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
         self.nlpdf_utils['mtm'] = mtm
         self.nlpdf_utils['k_mtm'] = original_var_shape[1] if mtm else 0
         self.nlpdf_utils['n_pix'] = idx_pix.size if idx_pix is not None else self.N
+        
+        if idx_pix is not None:
+            Var = Var[idx_pix]
+        if mtm:
+            Var = Var.reshape(-1, *original_var_shape[2:])
 
         self.nlpdf_utils['laplacian_local'] = penalty_one_pix(
             Var,
             self.lower_bounds,
             self.upper_bounds,
             self.indicator_margin_scale,
-        )  # (N_candidates,)
-        
-        if idx_pix is not None:
-            Var = Var[idx_pix] * 1
-        if mtm:
-            Var = Var.reshape(-1, *original_var_shape[2:])
-
-        nlpdf_full = penalty_one_pix(Var, self.lower_bounds, self.upper_bounds, self.indicator_margin_scale)
+        )  # (N_candidates, D)
 
         if mtm:
-            self.nlpdf_utils['nlpdf_full'] = nlpdf_full.reshape(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], *original_var_shape[2:])
+            self.nlpdf_utils['nlpdf_full'] = self.nlpdf_utils['laplacian_local'].reshape(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], *original_var_shape[2:])
         else:
-            self.nlpdf_utils['nlpdf_full'] = nlpdf_full.reshape(self.nlpdf_utils['n_pix'], *original_var_shape[1:])
+            self.nlpdf_utils['nlpdf_full'] = self.nlpdf_utils['laplacian_local'].reshape(self.nlpdf_utils['n_pix'], *original_var_shape[1:])
 
         if compute_derivatives:
             grad_ = gradient_penalty(

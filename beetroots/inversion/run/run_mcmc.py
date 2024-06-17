@@ -4,6 +4,7 @@ import os
 import time
 from concurrent.futures import ProcessPoolExecutor
 from typing import Optional, Union
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -12,6 +13,7 @@ from beetroots.inversion.results.results_optim_map import ResultsExtractorOptimM
 from beetroots.inversion.results.results_optim_mle import ResultsExtractorOptimMLE
 from beetroots.inversion.run.abstract_run import Run
 from beetroots.modelling.target_distribution.posterior import Posterior
+from beetroots.modelling.target_distribution.abstract_target_distribution import TargetDistribution
 from beetroots.sampler.abstract_sampler import Sampler
 from beetroots.sampler.saver.abstract_saver import Saver
 from beetroots.space_transform.abstract_transform import Scaler
@@ -40,11 +42,11 @@ class RunMCMC(Run):
 
     def prepare_run(
         self,
-        dict_posteriors: dict[str, Posterior],
+        dict_posteriors: dict[str, Union[Posterior, dict[str, TargetDistribution]]],
         path_raw: str,
         N_runs: int,
         scaler: Scaler,
-        start_from: Optional[str],
+        start_from: Optional[Union[str, dict]],
         path_csv_mle: Optional[str],
         path_csv_map: Optional[str],
     ) -> Optional[np.ndarray]:
@@ -75,6 +77,7 @@ class RunMCMC(Run):
         Optional[np.ndarray]
             starting point of the  (in scaled space) inversion, ``Vars_0``, if specified. Otherwise ``None``.
         """
+        # FIXME: we assume here that each var needs to be scaled. This is not always the case (ex: auxiliary var)
         # step 1 : create empty folders to save the run results
         for seed in range(N_runs):
             for model_name in list(dict_posteriors.keys()):
@@ -84,27 +87,63 @@ class RunMCMC(Run):
                     os.mkdir(folder_path)
 
         # step 2 : read Vars_0 if needed
-        assert start_from in ["MLE", "MAP", None]
         model_name = list(dict_posteriors.keys())[0]
+        if isinstance(dict_posteriors[model_name], Posterior):
+            assert isinstance(start_from, str) or isinstance(start_from, np.ndarray) or start_from is None
+            if isinstance(start_from, str):
+                assert start_from in ["MLE", "MAP"]
 
-        if start_from == "MLE":
-            assert path_csv_mle is not None
-            Vars_0, _ = ResultsExtractorOptimMLE.read_estimator(
-                path_csv_mle,
-                model_name,
-            )
-            Vars_0 = scaler.from_lin_to_scaled(Vars_0)
+            if start_from == "MLE":
+                assert path_csv_mle is not None
+                Vars_0, _ = ResultsExtractorOptimMLE.read_estimator(
+                    path_csv_mle,
+                    model_name,
+                )
+                Vars_0 = scaler.from_lin_to_scaled(Vars_0)
+                warnings.warn('Var starting state assumed to be in scaled space')
+            elif start_from == "MAP":
+                assert path_csv_map is not None
+                Vars_0, _ = ResultsExtractorOptimMAP.read_estimator(
+                    path_csv_map,
+                    model_name,
+                )
+                Vars_0 = scaler.from_lin_to_scaled(Vars_0)
+                warnings.warn('Var starting state assumed to be in scaled space')
+            elif isinstance(start_from, np.ndarray):
+                Vars_0 = start_from * 1
+                warnings.warn(f'array provided for {key}, assumed to be already scaled if necessary.')
+            else:
+                Vars_0 = None
 
-        elif start_from == "MAP":
-            assert path_csv_map is not None
-            Vars_0, _ = ResultsExtractorOptimMAP.read_estimator(
-                path_csv_map,
-                model_name,
-            )
-            Vars_0 = scaler.from_lin_to_scaled(Vars_0)
-
-        else:
-            Vars_0 = None
+        elif isinstance(dict_posteriors[model_name], dict):
+            assert list(start_from.keys()) == list(dict_posteriors[model_name].keys())
+            Vars_0 = dict()
+            for key, value in start_from.items():
+                assert isinstance(value, np.ndarray) or isinstance(value, str) or value is None
+                if isinstance(value, str):
+                    assert value in ["MLE", "MAP"]
+                    if value == "MLE":
+                        assert path_csv_mle is not None
+                        temp, _ = ResultsExtractorOptimMLE.read_estimator(
+                            path_csv_mle,
+                            model_name,
+                        )
+                        Vars_0[key] = scaler.from_lin_to_scaled(temp)
+                        warnings.warn('Var starting state assumed to be in scaled space')
+                    elif value == "MAP":
+                        assert path_csv_map is not None
+                        temp, _ = ResultsExtractorOptimMAP.read_estimator(
+                            path_csv_map,
+                            model_name,
+                        )
+                        Vars_0[key] = scaler.from_lin_to_scaled(temp)
+                        warnings.warn('Var starting state assumed to be in scaled space')
+                elif isinstance(value, np.ndarray):
+                    temp = value * 1
+                    Vars_0[key] = temp
+                    warnings.warn(f'array provided for {key}, assumed to be already scaled if necessary.')
+                else:
+                    Vars_0[key] = None
 
         return Vars_0
 

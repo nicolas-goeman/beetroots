@@ -58,6 +58,9 @@ class MyGibbsSampler(Sampler):
         self.proposal_distribution_mtm = my_gibbs_sampler_params.proposal_distributions_mtm
         r"""dict[function]: function to generate random start values for the variables"""
 
+        self.generate_random_start_type = my_gibbs_sampler_params.generate_random_start_type
+        r"""dict[str]: type of random start values for the variables if no indicator prior (Standard or half-standard)"""
+
         # P-MALA params
         # ! redefine size of params
         self.eps0 = my_gibbs_sampler_params.initial_step_size
@@ -257,7 +260,7 @@ class MyGibbsSampler(Sampler):
         var_names = list(target_distributions.keys())
 
         # gets the component distributions for model checking.
-        all_components = dict
+        all_components = dict()
         for target_name in var_names:
             all_components.update(target_distributions[target_name].distribution_components)
         self.model_checking_component = all_components[self.model_checking_component_name]
@@ -265,11 +268,12 @@ class MyGibbsSampler(Sampler):
         # FIXME: temporary solution for Vars_0. We should have a dict with MAP, MLE or None for each variable.
         # assert len(target_distributions) == len(Vars_0), "Vars_0 should have the same number of variables as target_distributions. If no initial value is provided for a variable it should be set to None in the Vars_0 dict."
         # assert set(target_distributions.keys()) == set(Vars_0.keys()), "Vars_0 should have the same variable names (keys of dict) as target_distributions"
-        Vars_0 = {key: None for key in var_names}
         self.current = {key: dict() for key in var_names}
         for key in var_names:
             if Vars_0[key] is None:
-                self.current[key]["var"] = self.generate_random_start_Var(target_distributions[key])  # (N, D)
+                self.current[key]["var"] = self.generate_random_start_Var(target_distributions[key], type=self.generate_random_start_type[key])  # (N, D)
+            else:
+                self.current[key]["var"] = Vars_0[key] * 1
 
         for current_var_dict in self.current.values():
             assert None not in current_var_dict['var'], "Vars_0 should not contain None values after generating random start values"
@@ -294,7 +298,6 @@ class MyGibbsSampler(Sampler):
             self.j_t[key] = xp.zeros(target_distributions[key].var_shape)
             additional_sampling_log[key] = dict()
             dict_objective[key] = dict() 
-            nll_full[key] = dict()
 
         rng_state_array, _ = self.get_rng_state()
 
@@ -571,9 +574,9 @@ class MyGibbsSampler(Sampler):
             current_candidate[key] = {'var': candidate_pixel}
             target_distribution.update_nlpdf_utils(current_candidate, idx_pix, compute_derivatives=True, compute_derivatives_2nd_order=True)
             candidate_all = {}
-            candidate_all['objective_pix'] = target_distribution.neglog_pdf(pixelwise=True, update_nlpdf_utils=False)
-            candidate_all['grad'] = target_distribution.grad_neglog_pdf(update_nlpdf_utils=False) # (N, D)
-            candidate_all["hess_diag"] = target_distribution.hess_diag_neglog_pdf(update_nlpdf_utils=False) if self.compute_correction_term else None# (N, D)
+            candidate_all['objective_pix'] = target_distribution.neglog_pdf(pixelwise=True, update_nlpdf_utils=False, idx_pix=idx_pix)
+            candidate_all['grad'] = target_distribution.grad_neglog_pdf(update_nlpdf_utils=False, idx_pix=idx_pix) # (N, D)
+            candidate_all["hess_diag"] = target_distribution.hess_diag_neglog_pdf(update_nlpdf_utils=False, idx_pix=idx_pix) if self.compute_correction_term else None# (N, D)
 
             grad_cand = candidate_all["grad"] * 1
             v_cand = (

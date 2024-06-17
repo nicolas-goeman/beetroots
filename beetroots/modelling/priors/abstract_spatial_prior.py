@@ -83,7 +83,7 @@ class SpatialPrior(PriorProbaDistribution):
         list_idx_sampling: List[int],
         **kwargs,
     ) -> None:
-        super().__init__(D, N)
+        super().__init__(D, N, **kwargs)
 
         # list of neighboring relations
         self.use_next_nearest_neighbors = (

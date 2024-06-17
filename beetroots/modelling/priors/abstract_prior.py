@@ -12,12 +12,14 @@ except:
 class PriorProbaDistribution(ComponentDistribution):
     r"""Abstract Base Class for a probability distribution on non-countable set"""
 
-    def __init__(self, D: int, N: int, var_name: str = "", **kwargs) -> None:
+    def __init__(self, D: int, N: int, var_name: str, **kwargs) -> None:
         super().__init__(**kwargs)
         self.D = D
         """int: number of distinct physical parameters"""
         self.N = N
         """int: number of pixels in each physical dimension"""
+        self.var_name = var_name
+        """str: name of the variable of the target distribution"""
 
     @abstractmethod
     def neglog_pdf(

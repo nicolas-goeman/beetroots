@@ -21,7 +21,7 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
         N: int,
         var_names_dict: dict,
         sigma_m: Union[float, xp.ndarray],
-        var_name: str = None,
+        **kwargs,
     ) -> None:
         
         self.forward_map = forward_map
@@ -48,21 +48,33 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
         self,
         pixelwise: bool = False,
         full: bool = False,
-        idx: Optional[xp.ndarray] = None,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.N, self.L))
+        k_mtm = self.nlpdf_utils['k_mtm']
+        n_pix = self.nlpdf_utils['n_pix']
+        N_pix = self.nlpdf_utils['N_pix']
+        
+        assert xp.sum([pixelwise, full]) == 1
+
+        out = xp.zeros((N_pix, self.L))
         out = self.nlpdf_utils['log_aux']
-        out += xp.square(self.nlpdf_utils['log_aux'] + self.sigma_m2/2 - self.forward_map_evals['log_f_Var'])/(2*self.sigma_m2)
+
+        out += xp.square(self.nlpdf_utils['log_aux'] + self.nlpdf_utils['sigma_m2']/2 - self.forward_map_evals['log_f_Var'])/(2*self.nlpdf_utils['sigma_m2'])
         
         if full:
-            assert out.shape == (self.N, self.L)
+            assert out.shape == (N_pix, self.L)
+            if k_mtm > 0:
+                out = out.reshape(n_pix, k_mtm, *out.shape[1:])
             return out
         elif pixelwise:
-            out = xp.sum(out, axis=1)
-            assert out.shape == (self.N,)
+            out = xp.sum(out, axis=-1)
+            assert out.shape == (N_pix,)
+            if k_mtm > 0:
+                out = out.reshape(n_pix, k_mtm)
             return out
         else:
-            out = xp.sum(out)
+            if k_mtm > 0:
+                out = out.reshape(n_pix, k_mtm, *out.shape[1:])
+            out = out.swapaxes(0, 1).sum(axis=tuple(range(1, out.ndim)))
         
         return out
     
@@ -74,10 +86,10 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
         Returns:
             Union[float, xp.ndarray]: array of shape (N, L)
         """        
-        N_pix = self.nlpdf_utils['N_pix']
-        out = xp.zeros((N_pix, self.L))
+        n_pix = self.nlpdf_utils['n_pix']
+        out = xp.zeros((n_pix, self.L))
 
-        out += 3/2 + (self.nlpdf_utils['log_aux'] - self.forward_map_evals['log_f_Var'])/self.sigma_m2
+        out += 3/2 + (self.nlpdf_utils['log_aux'] - self.forward_map_evals['log_f_Var'])/self.nlpdf_utils['sigma_m2']
         out /= self.nlpdf_utils['aux']
 
         return out
@@ -90,11 +102,11 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
         Returns:
             Union[float, xp.ndarray]: array of shape (N, D)
         """        
-        N_pix = self.nlpdf_utils['N_pix']
-        out = xp.zeros((N_pix, self.D, self.L))
+        n_pix = self.nlpdf_utils['n_pix']
+        out = xp.zeros((n_pix, self.D, self.L))
 
-        out -= self.forward_map_evals['grad_log_f_Var']*xp.expand_dims(self.nlpdf_utils['log_aux'] + self.sigma_m2/2 - self.forward_map_evals['log_f_Var'], axis=1)
-        out /= self.sigma_m2
+        out -= self.forward_map_evals['grad_log_f_Var']*xp.expand_dims(self.nlpdf_utils['log_aux'] + self.nlpdf_utils['sigma_m2']/2 - self.forward_map_evals['log_f_Var'], axis=1)
+        out /= xp.expand_dims(self.nlpdf_utils['sigma_m2'], axis=1)
 
         return out.sum(axis=-1) # sum over the last axis L, outputs a (N, D) array
             
@@ -118,8 +130,6 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
             Union[float, xp.ndarray]: array of shape (n_pix, [k_mtm], L) or (n_pix, [k_mtm], D) if full else if pixelwise array of shape (N,) or (N, [k_mtm]) else float or array of shape (k_mtm,)
         """        
         n_pix = self.nlpdf_utils['n_pix']
-        k_mtm = self.nlpdf_utils['k_mtm']
-        N_pix = self.nlpdf_utils['N_pix']
          
         if deriv_var_name == self.var_names_dict["aux"]:
             out = self.gradient_neglog_pdf_wrt_aux()
@@ -130,26 +140,24 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
 
         if full:
             if deriv_var_name == self.var_names_dict["aux"]:
-                assert out.shape == (N_pix, self.L)
+                assert out.shape == (n_pix, self.L)
             elif deriv_var_name == self.var_names_dict["target"]:
-                assert out.shape == (N_pix, self.D)
-            return out if k_mtm == 0 else out.reshape(n_pix, k_mtm, *out.shape[1:])
+                assert out.shape == (n_pix, self.D)
+            return out
         elif pixelwise:
             out = xp.sum(out, axis=tuple(range(1, out.ndim)))
-            assert out.shape == (N_pix,)
-            return out if k_mtm == 0 else out.reshape(n_pix, k_mtm)
+            assert out.shape == (n_pix,)
+            return out
         else:
-            if k_mtm > 0:
-                out = out.reshape(n_pix, k_mtm, *out.shape[1:])
-            return xp.sum(out) if k_mtm == 0 else out.swapaxes(0, 1).sum(axis=tuple(range(1, out.ndim)))
+            return xp.sum(out)
     
     def hess_diag_neglog_pdf_wrt_aux(
         self,
     ) -> Union[float, xp.ndarray]:
-        N_pix = self.nlpdf_utils['N_pix']
-        out = xp.zeros((N_pix, self.L))
+        n_pix = self.nlpdf_utils['n_pix']
+        out = xp.zeros((n_pix, self.L))
 
-        out += 3/2 + (self.nlpdf_utils['log_aux'] - self.forward_map_evals['log_f_Var']- 1)/self.sigma_m2
+        out += 3/2 + (self.nlpdf_utils['log_aux'] - self.forward_map_evals['log_f_Var']- 1)/self.nlpdf_utils['sigma_m2']
         out /= -self.nlpdf_utils['aux']**2
 
         return out
@@ -157,12 +165,12 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
     def hess_diag_neglog_pdf_wrt_target(
         self,
     ) -> Union[float, xp.ndarray]:
-        N_pix = self.nlpdf_utils['N_pix']
-        out = xp.zeros((N_pix, self.D, self.L))
+        n_pix = self.nlpdf_utils['n_pix']
+        out = xp.zeros((n_pix, self.D, self.L))
 
-        out += self.forward_map_evals['hess_diag_log_f_Var']*xp.expand_dims(self.nlpdf_utils['log_aux'] + self.sigma_m2/2 - self.forward_map_evals['log_f_Var'], axis=1)
+        out += self.forward_map_evals['hess_diag_log_f_Var']*xp.expand_dims(self.nlpdf_utils['log_aux'] + self.nlpdf_utils['sigma_m2']/2 - self.forward_map_evals['log_f_Var'], axis=1)
         out -= self.forward_map_evals['grad_log_f_Var']**2
-        out /= self.sigma_m2
+        out /= xp.expand_dims(self.nlpdf_utils['sigma_m2'], axis=1)
 
         return out.sum(axis=-1) # sum over the last axis L, outputs a (N, D) array
     
@@ -188,7 +196,6 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
         
         n_pix = self.nlpdf_utils['n_pix']
         k_mtm = self.nlpdf_utils['k_mtm']
-        N_pix = self.nlpdf_utils['N_pix']
          
         if deriv_var_name == self.var_names_dict["aux"]:
             out = self.hess_neglog_pdf_wrt_aux()
@@ -199,28 +206,38 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
 
         if full:
             if deriv_var_name == self.var_names_dict["aux"]:
-                assert out.shape == (N_pix, self.L)
+                assert out.shape == (n_pix, self.L)
             elif deriv_var_name == self.var_names_dict["target"]:
-                assert out.shape == (N_pix, self.D)
-            return out if k_mtm == 0 else out.reshape(n_pix, k_mtm, *out.shape[1:])
+                assert out.shape == (n_pix, self.D)
+            return out
         elif pixelwise:
             out = xp.sum(out, axis=tuple(range(1, out.ndim)))
-            assert out.shape == (N_pix,)
-            return out if k_mtm == 0 else out.reshape(n_pix, k_mtm)
+            assert out.shape == (n_pix,)
+            return out
         else:
-            if k_mtm > 0:
-                out = out.reshape(n_pix, k_mtm, *out.shape[1:])
-            return xp.sum(out) if k_mtm == 0 else out.swapaxes(0, 1).sum(axis=tuple(range(1, out.ndim)))
-        
+            return xp.sum(out)
+    
+    def evaluate_all_forward_map(
+        self,
+        Var: xp.ndarray,
+        compute_derivatives: bool,
+        compute_derivatives_2nd_order: bool,
+    ) -> dict[str, Union[float, xp.ndarray]]:
+        assert len(Var.shape) == 2 and Var.shape[1] == self.D
+
+        forward_map_evals = self.forward_map.compute_all(
+            Var, True, True, compute_derivatives, compute_derivatives_2nd_order
+        )
+        self.forward_map_evals = forward_map_evals
     
     def evaluate_all_nlpdf_utils(
         self,
         current: dict[str, dict],
-        deriv_var_name: str = None,
         idx_pix: Optional[xp.ndarray] = None,
         compute_derivatives: bool = True,
         compute_derivatives_2nd_order: bool = True,
         mtm: bool = False,
+        deriv_var_name: str = None,
     ) -> dict:
         # TODO: implement this method
         shape_var_aux = current[self.var_names_dict['aux']]['var'].shape
@@ -233,6 +250,8 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
         self.nlpdf_utils["aux"] = current[self.var_names_dict['aux']]['var']
         if idx_pix is not None:
             self.nlpdf_utils["aux"] = self.nlpdf_utils["aux"][idx_pix]
+        if mtm:
+            self.nlpdf_utils["aux"] = self.nlpdf_utils["aux"].reshape(-1, *shape_var_target[2:])
         self.nlpdf_utils["log_aux"] = xp.log(self.nlpdf_utils["aux"])
 
 
@@ -241,8 +260,8 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
             forward_var_inputs = forward_var_inputs[idx_pix]
         if mtm:
             forward_var_inputs = forward_var_inputs.reshape(-1, *shape_var_target[2:])
-        compute_derivatives_forward = compute_derivatives and deriv_var_name == "target"
-        compute_derivatives_2nd_order_forward = compute_derivatives_2nd_order and deriv_var_name == "target"
+        compute_derivatives_forward = compute_derivatives and self.var_names_dict["target"] == deriv_var_name
+        compute_derivatives_2nd_order_forward = compute_derivatives_2nd_order and self.var_names_dict["target"] == deriv_var_name 
         self.evaluate_all_forward_map(forward_var_inputs, compute_derivatives=compute_derivatives_forward, compute_derivatives_2nd_order=compute_derivatives_2nd_order_forward) # TODO: put variable and other required arguments here
 
         n_pix = idx_pix.size if idx_pix is not None else shape_var_aux[0]
@@ -253,6 +272,12 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
             assert n_pix * k_mtm == N_pix
         else:
             assert n_pix == N_pix
+
+        idx_pix = xp.arange(n_pix) if idx_pix is None else idx_pix
+        self.nlpdf_utils['sigma_m2'] = xp.repeat(self.sigma_m2[idx_pix], max(1, k_mtm), axis=0)
+
+        assert self.nlpdf_utils['sigma_m2'].shape[0] == N_pix
+    
 
         self.nlpdf_utils['n_pix'] = n_pix
         self.nlpdf_utils['N_pix'] = N_pix
@@ -280,40 +305,59 @@ class ObservationsGivenAuxiliary(Likelihood):
         y: xp.ndarray,
         sigma_a: Union[float, xp.ndarray],
         omega: xp.ndarray,
+        var_name: str,
+        distribution_name: str = 'obs_given_auxiliary',
     ) -> None:
         super().__init__(forward_map=None, y=y, D=D, L=L, N=N)
         
         if isinstance(sigma_a, (float, int)):
             self.sigma_a = sigma_a * xp.ones((N, L))
+            self.sigma_a2 = xp.square(self.sigma_a)
         else:
             assert sigma_a.shape == (N, L)
             self.sigma_a = sigma_a
+            self.sigma_a2 = xp.square(self.sigma_a)
 
         if isinstance(omega, (float, int)):
             self.omega = omega * xp.ones((N, L))
         else:
             assert omega.shape == (N, L)
             self.omega = omega
+
+        assert isinstance(var_name, str)
+        self.var_name = var_name
+        '''str: variable name for the target variable'''
+
+        assert isinstance(distribution_name, str)
+        self.name = distribution_name
+        '''str: name of the distribution'''
     
 
     def neglog_pdf_u(
         self,
-        y: xp.ndarray,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.N, self.L))
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
 
-        out += xp.square(y-self.nlpdf_utils['aux'])
-        out /= 2*self.nlpdf_utils['s_a2'] 
+        out += xp.square(self.y-self.nlpdf_utils['aux'])
+        sigma_a2_broadcast = self.sigma_a2 if not self.nlpdf_utils['mtm'] else self.sigma_a2[:,None]
+        out /= 2*sigma_a2_broadcast
         
         return out
     
     def neglog_pdf_c(
         self,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.N, self.L))
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
         
-        z = self.nlpdf_utils['w'] - self.nlpdf_utils['aux']
-        z /= self.nlpdf_utils['s_a']
+        if not self.nlpdf_utils['mtm']:
+            omega_broadcast = self.omega
+            sigma_a_broadcast = self.sigma_a
+        else:
+            omega_broadcast= self.omega[:,None]
+            sigma_a_broadcast = self.sigma_a[:,None]
+        
+        z = omega_broadcast - self.nlpdf_utils['aux']
+        z /= sigma_a_broadcast
 
         out -= log_ndtr(z)
 
@@ -321,51 +365,77 @@ class ObservationsGivenAuxiliary(Likelihood):
 
     def neglog_pdf(
         self,
-        current: dict[str, dict],
         pixelwise: bool = False,
         full: bool = False,
-        idx_pix: Optional[xp.ndarray] = None,
+        **kwargs: dict,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.N, self.L))
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
+
+        if not self.nlpdf_utils['mtm']:
+            omega_broadcast = self.omega
+            y_broadcast = self.y
+        else:
+            omega_broadcast = self.omega[:,None]
+            y_broadcast = self.y[:,None]
+
         out += xp.where(
-            self.nlpdf_utils["censored_mask"],
+            (omega_broadcast==y_broadcast),
             self.nlpdf_utils["nlpdf_c"],
             self.nlpdf_utils["nlpdf_u"],
         )
         
         if full:
-            assert out.shape == (self.N, self.L)
+            if self.nlpdf_utils['mtm']:
+                assert out.shape == (self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
+            else:
+                assert out.shape == (self.nlpdf_utils['n_pix'], self.L)
             return out
         elif pixelwise:
-            out = xp.sum(out, axis=1)
-            assert out.shape == (self.N,)
+            out = xp.sum(out, axis=-1)
+            if self.nlpdf_utils['mtm']:
+                assert out.shape == (self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'])
+            else:
+                assert out.shape == (self.nlpdf_utils['n_pix'],)
             return out
         else:
-            out = xp.sum(out)
+            out = xp.sum(out) if not self.nlpdf_utils['mtm'] else out.swapaxes(0,1).sum(axis=tuple(range(1, out.ndim)))
         
         return out
 
     def gradient_neglog_pdf_u(
         self,
-        y: xp.ndarray,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.N, self.L))
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
 
-        out -= y-self.nlpdf_utils['aux']
-        out /= self.nlpdf_utils['s_a2'] 
+        if not self.nlpdf_utils['mtm']:
+            y_broadcast = self.y
+            sigma_a2_broadcast = self.sigma_a2
+        else:
+            y_broadcast= self.y[: None]
+            sigma_a2_broadcast = self.sigma_a2[:,None]
+        
+        out -= y_broadcast-self.nlpdf_utils['aux']
+        out /= sigma_a2_broadcast
         
         return out
     
     def gradient_neglog_pdf_c(
         self,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.N, self.L))
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
         
-        z = self.nlpdf_utils['w'] - self.nlpdf_utils['aux']
-        z /= self.nlpdf_utils['s_a']
+        if not self.nlpdf_utils['mtm']:
+            omega_broadcast = self.omega
+            sigma_a_broadcast = self.sigma_a
+        else:
+            omega_broadcast= self.omega[:,None]
+            sigma_a_broadcast = self.sigma_a[:,None]
+        
+        z = omega_broadcast - self.nlpdf_utils['aux']
+        z /= sigma_a_broadcast
 
         out += utils.norm_pdf_cdf_ratio(z)
-        out /= self.nlpdf_utils['s_a']
+        out /= sigma_a_broadcast
 
         return out
 
@@ -373,24 +443,38 @@ class ObservationsGivenAuxiliary(Likelihood):
         self,
         pixelwise: bool = False,
         full: bool = False,
-        idx: Optional[xp.ndarray] = None,
+        **kwargs: dict,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.N, self.L))
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
+
+        if not self.nlpdf_utils['mtm']:
+            omega_broadcast = self.omega
+            y_broadcast = self.y
+        else:
+            omega_broadcast = self.omega[:,None]
+            y_broadcast = self.y[:,None]
+
         out += xp.where(
-            self.nlpdf_utils["censored_mask"],
+            (omega_broadcast==y_broadcast),
             self.nlpdf_utils["grad_nlpdf_c"],
             self.nlpdf_utils["grad_nlpdf_u"],
         )
         
         if full:
-            assert out.shape == (self.N, self.L)
+            if not self.nlpdf_utils['mtm']:
+                assert out.shape == (self.nlpdf_utils['n_pix'], self.L)
+            else:
+                assert out.shape == (self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
             return out
         elif pixelwise:
-            out = xp.sum(out, axis=1)
-            assert out.shape == (self.N,)
+            out = xp.sum(out, axis=-1)
+            if self.nlpdf_utils['mtm']:
+                assert out.shape == (self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'])
+            else:
+                assert out.shape == (self.nlpdf_utils['n_pix'],)
             return out
         else:
-            out = xp.sum(out)
+            out = xp.sum(out) if not self.nlpdf_utils['mtm'] else out.swapaxes(0,1).sum(axis=tuple(range(1, out.ndim)))
         
         return out
     
@@ -398,23 +482,34 @@ class ObservationsGivenAuxiliary(Likelihood):
         self,
         y: xp.ndarray,
     ) -> Union[float, xp.ndarray]:
-        out = xp.ones((self.N, self.L))
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
 
-        out /= self.nlpdf_utils['s_a2'] 
+        sigma_a2_broadcast = self.sigma_a2 if not self.nlpdf_utils['mtm'] else self.sigma_a2[:,None]
+
+        out /= sigma_a2_broadcast
         
         return out
     
     def hess_diag_diag_neglog_pdf_c(
         self,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.N, self.L))
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
+
+        if not self.nlpdf_utils['mtm']:
+            omega_broadcast = self.omega
+            sigma_a_broadcast = self.sigma_a
+            sigma_a2_broadcast = self.sigma_a2
+        else:
+            omega_broadcast= self.omega[:,None]
+            sigma_a_broadcast = self.sigma_a[:,None]
+            sigma_a2_broadcast = self.sigma_a2[:,None]
         
-        z = self.nlpdf_utils['w'] - self.nlpdf_utils['aux']
-        z /= self.nlpdf_utils['s_a']
+        z = omega_broadcast - self.nlpdf_utils['aux']
+        z /= sigma_a_broadcast
 
         out += xp.square(utils.norm_pdf_cdf_ratio(z))
         out += utils.norm_pdf_cdf_ratio(z)*z
-        out /= self.nlpdf_utils['s_a2']
+        out /= sigma_a2_broadcast
 
         return out
 
@@ -422,24 +517,40 @@ class ObservationsGivenAuxiliary(Likelihood):
         self,
         pixelwise: bool = False,
         full: bool = False,
-        idx: Optional[xp.ndarray] = None,
+        **kwargs: dict,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.N, self.L))
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
+
+        omega_broadcast = self.omega if not self.nlpdf_utils['mtm'] else self.omega[:,None]
+
+        if not self.nlpdf_utils['mtm']:
+            omega_broadcast = self.omega
+            y_broadcast = self.y
+        else:
+            omega_broadcast = self.omega[:,None]
+            y_broadcast = self.y[:,None]
+
         out += xp.where(
-            self.nlpdf_utils["censored_mask"],
+            (omega_broadcast==y_broadcast),
             self.nlpdf_utils["hess_diag_diag_nlpdf_c"],
             self.nlpdf_utils["hess_diag_diag_nlpdf_u"],
         )
         
         if full:
-            assert out.shape == (self.N, self.L)
+            if not self.nlpdf_utils['mtm']:
+                assert out.shape == (self.nlpdf_utils['n_pix'], self.L)
+            else:
+                assert out.shape == (self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
             return out
         elif pixelwise:
-            out = xp.sum(out, axis=1)
-            assert out.shape == (self.N,)
+            out = xp.sum(out, axis=-1)
+            if self.nlpdf_utils['mtm']:
+                assert out.shape == (self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'])
+            else:
+                assert out.shape == (self.nlpdf_utils['n_pix'],)
             return out
         else:
-            out = xp.sum(out)
+            out = xp.sum(out) if not self.nlpdf_utils['mtm'] else out.swapaxes(0,1).sum(axis=tuple(range(1, out.ndim)))
         
         return out
     
@@ -449,8 +560,30 @@ class ObservationsGivenAuxiliary(Likelihood):
         idx_pix: Optional[xp.ndarray],
         compute_derivatives: bool,
         compute_derivatives_2nd_order: bool,
+        mtm: bool,
+        **kwargs: dict,
         ) -> None:
-        self.nlpdf_utils = {} #TODO: implement nlpdf_utils method
+        self.nlpdf_utils = dict()
+        self.nlpdf_utils['aux'] = current[self.var_name]["var"]
+        original_var_shape = self.nlpdf_utils['aux'].shape
+
+        assert original_var_shape[-1]==self.L
+
+        self.nlpdf_utils['mtm'] = mtm
+        self.nlpdf_utils['k_mtm'] = original_var_shape[1] if mtm else 0
+        self.nlpdf_utils['n_pix'] = idx_pix.size if idx_pix is not None else self.N
+
+        self.nlpdf_utils["nlpdf_c"] = self.neglog_pdf_c()
+        self.nlpdf_utils["nlpdf_u"] = self.neglog_pdf_u()
+
+        if compute_derivatives:
+            self.nlpdf_utils["grad_nlpdf_c"] = self.gradient_neglog_pdf_c()
+            self.nlpdf_utils["grad_nlpdf_u"] = self.gradient_neglog_pdf_u()
+            if compute_derivatives_2nd_order:
+                self.nlpdf_utils["hess_diag_diag_nlpdf_c"] = self.hess_diag_diag_neglog_pdf_c()
+                self.nlpdf_utils["hess_diag_diag_nlpdf_u"] = self.hess_diag_diag_neglog_pdf_u()
+
+
 
     def sample_observation_model(
         self,

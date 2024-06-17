@@ -45,10 +45,10 @@ class TargetDistribution(ABC):
         self.var_name = var_name
         """str: name of the variable of the target distribution"""
 
-        self.vars_involved = []
-        for cd in self.distribution_components.values():
-            self.vars_involved += list(cd.vars_involved)
-        self.vars_involved = set(self.vars_involved)
+        # self.vars_involved = []
+        # for cd in self.distribution_components.values():
+        #     self.vars_involved += list(cd.vars_involved)
+        # self.vars_involved = set(self.vars_involved)
         """list: list of all variable names involved in the target distribution"""
 
         if separable is True: # all terms are independent (separable)

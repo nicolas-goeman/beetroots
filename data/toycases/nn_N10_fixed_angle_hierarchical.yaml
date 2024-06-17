@@ -52,6 +52,7 @@ component_distributions:
     class_name: "SmoothIndicatorPrior"
     do_scaling: True
     params:
+      var_name: "full_conditional_theta"
       indicator_margin_scale: 1.0e-1
       lower_bounds_lin:
         - 1.0e-1 # kappa
@@ -70,6 +71,7 @@ component_distributions:
     class_name: "L22LaplacianSpatialPrior"
     params:
       name: "L2-laplacian"
+      var_name: "full_conditional_theta"
       use_next_nearest_neighbors: false
       initial_regu_weights: [1.0, 1.0, 1.0, 1.0, 1.0]
   aux_given_theta:
@@ -83,7 +85,8 @@ component_distributions:
   obs_given_aux:
     module: beetroots.modelling.hierarchical.aux_var_u
     class_name: "ObservationsGivenAuxiliary"
-    params: {}
+    params:
+      var_name: "full_conditional_auxiliary"
 #  
 target_distributions:
   full_conditional_theta: ["theta_indicator_prior", "theta_spatial_prior", aux_given_theta]
@@ -99,7 +102,18 @@ sampling_params:
     k_mtm: 100
     is_stochastic: true
     compute_correction_term: false
-    model_checking_component_names: "obs_given_aux"
+    model_checking_component_name: "obs_given_aux"
+    proposal_distributions_mtm_params:
+      full_conditional_theta:
+        module_name : "mixture_neighbors_indicator"
+        class_name: "ProposalNeighborsAndIndicator"
+        params: {}
+      full_conditional_auxiliary:
+        module_name : "mixture_neighbors_indicator"
+        class_name: "ProposalNeighborsAndIndicator"
+        params: {}
+    generate_random_start_type: {}
+    
 #
 # run params
 run_params:
@@ -113,7 +127,9 @@ run_params:
     plot_comparisons_yspace: false
     batch_size: 10
     freq_save: 1
-    start_from: null
+    start_from:
+      full_conditional_theta: null
+      full_conditional_auxiliary: null
     regu_spatial_N0: !!float inf # sets to infinite
     regu_spatial_scale: 1.0
     regu_spatial_vmin: 1.0e-8

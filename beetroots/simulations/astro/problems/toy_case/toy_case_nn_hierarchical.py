@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 
 from beetroots.modelling.priors.spatial_prior_params import SpatialPriorParams
-from beetroots.sampler.utils.sampler_params import MySamplerParams
+from beetroots.sampler.utils.sampler_params import MyGibbsSamplerParams
 from beetroots.simulations.abstract_simulation import Simulation
 from beetroots.simulations.astro import data_validation
 from beetroots.simulations.astro.forward_map_setup.abstract_nn import SimulationNN
@@ -76,7 +76,7 @@ class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, Simulation
         )
 
         # run setup
-        dict_models, scaler, params_plot_setup = self.setup_target_distribution(
+        dict_models, scaler, params_plot_setup, kwargs_proposal_distributions = self.setup_target_distribution(
             scaler=scaler,
             forward_map=forward_map,
             y=y,
@@ -93,6 +93,8 @@ class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, Simulation
             dict_models,
             scaler,
             params_plot_setup,
+            kwargs_proposal_distributions,
+            y, # to initialize the auxiliary variable.
         )
 
     def main(self, params: dict, path_data_cloud: str) -> None:
@@ -101,6 +103,8 @@ class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, Simulation
             dict_models,
             scaler,
             params_plot_setup,
+            kwargs_proposal_distributions,
+            y,
         ) = simulation.setup(
             **params["forward_model"],
             #
@@ -121,22 +125,28 @@ class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, Simulation
             **params_plot_setup,
             scaler=scaler,
         )
+        
         # * Optim MAP
         if params["to_run_optim_map"]:
+            for k in kwargs_proposal_distributions.keys():
+                params['sampling_params']['map']['proposal_distributions_mtm_params'][k]['params'].update(kwargs_proposal_distributions[k])
             simulation.inversion_optim_map(
                 dict_models=dict_models,
                 scaler=scaler,
-                my_sampler_params=MySamplerParams(**params["sampling_params"]["map"]),
+                my_sampler_params=MyGibbsSamplerParams(**params["sampling_params"]["map"]),
                 can_run_in_parallel=params["forward_model"]["force_use_cpu"],
                 **params["run_params"]["map"],
             )
 
         # * MCMC
         if params["to_run_mcmc"]:
+            params["run_params"]["mcmc"]["start_from"]['full_conditional_auxiliary'] = y * 1
+            for k in kwargs_proposal_distributions.keys():
+                params['sampling_params']['mcmc']['proposal_distributions_mtm_params'][k]['params'].update(kwargs_proposal_distributions[k])
             simulation.inversion_mcmc(
                 dict_models=dict_models,
                 scaler=scaler,
-                my_sampler_params=MySamplerParams(**params["sampling_params"]["mcmc"]),
+                my_sampler_params=MyGibbsSamplerParams(**params["sampling_params"]["mcmc"]),
                 can_run_in_parallel=params["forward_model"]["force_use_cpu"],
                 **params["run_params"]["mcmc"],
             )

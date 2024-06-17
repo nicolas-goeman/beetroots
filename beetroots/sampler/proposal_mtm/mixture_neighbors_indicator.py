@@ -7,9 +7,10 @@ from typing import Union
 
 from beetroots.sampler.utils import utils
 
+from beetroots.sampler.proposal_mtm.abstract_proposal import ProposalDistribution
 from beetroots.modelling.priors.smooth_indicator_prior import penalty_one_pix
 
-class ProposalNeighborsAndIndicator:
+class ProposalNeighborsAndIndicator(ProposalDistribution):
     r"""Dataclass that implement the proposal distribution based on the smooth indicator prior and the spatial prior"""
 
     __slots__ = (
@@ -20,6 +21,33 @@ class ProposalNeighborsAndIndicator:
         "prior_spatial_weights",
     )
 
+    def __init__(
+        self,
+        lower_bounds: xp.ndarray,
+        upper_bounds: xp.ndarray,
+        indicator_margin_scale: float,
+        list_edges: xp.ndarray,
+        weights: xp.ndarray,
+    ) -> None:
+        r"""
+        Parameters
+        ----------
+        lower_bounds : xp.ndarray of shape (D,)
+            lower bounds of the indicator prior
+        upper_bounds : xp.ndarray of shape (D,)
+            upper bounds of the indicator prior
+        indicator_margin_scale : float
+            margin scale of the indicator prior
+        list_edges : List[tuple[int, int]]
+            list of edges
+        weights : xp.ndarray of shape (n_edges,)
+        """
+        self.lower_bounds = xp.asarray(lower_bounds)
+        self.upper_bounds = xp.asarray(upper_bounds)
+        self.margin_scale = indicator_margin_scale
+        self.list_edges = list_edges
+        self.weights = weights
+    
     def sample(
         self,
         Var: xp.ndarray,
@@ -51,11 +79,11 @@ class ProposalNeighborsAndIndicator:
 
         return utils.sample_conditional_spatial_and_indicator_prior(
             Var,
-            self.prior_spatial_list_edges,
-            self.prior_spatial_weights,
-            self.prior_indicator_lower_bounds,
-            self.prior_indicator_upper_bounds,
-            self.prior_indicator_margin_scale,
+            self.list_edges,
+            self.weights,
+            self.lower_bounds,
+            self.upper_bounds,
+            self.margin_scale,
             idx_pix=idx_pix,
             k_mtm=k_mtm,
             seed=seed,

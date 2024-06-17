@@ -19,6 +19,7 @@ class FullConditional(TargetDistribution):
         "distribution_components",
         "var_name",
         "dict_sites",
+        "var_shape",
     )
 
     def __init__(
@@ -28,13 +29,14 @@ class FullConditional(TargetDistribution):
         N: int,
         distribution_components: dict[str, ComponentDistribution],
         var_name: str,
+        var_shape: Tuple[int],
         separable: bool = True,
         dict_sites: Optional[Dict[int, xp.ndarray]] = None,
     ):
-        super().__init__(D, L, N, distribution_components)
+        super().__init__(D, L, N, var_name, distribution_components)
 
-        self.var_name = var_name
-        """str: name of the variable. Necessary for the computation of the gradient of the negative log pdf of the target distribution."""
+        self.var_shape = var_shape
+        """Tuple[int]: shape of the variable. Necessary for the computation of the gradient of the negative log pdf of the target distribution."""
 
         self.dict_sites = {}
         """dict[int, np.ndarray]: sites for pixels to be sampled in parallel in the MTM-chromoatic Gibbs kernel"""
@@ -47,33 +49,70 @@ class FullConditional(TargetDistribution):
         
         return
 
-    @abstractmethod
     def neglog_pdf(
         self,
-        current: dict[str, Union[dict, float, xp.ndarray]],
+        current: dict[str, Union[dict, float, xp.ndarray]]=None,
         idx_pix: Optional[xp.ndarray] = None,
         pixelwise: bool = False,
         update_nlpdf_utils: bool = True,
     ) -> float:
-        pass
+        if update_nlpdf_utils and current is None:
+            raise ValueError("current is None, cannot update nlpdf_utils")
+        elif update_nlpdf_utils and current is not None:
+            self.update_nlpdf_utils(current, idx_pix=idx_pix, compute_derivatives=False, compute_derivatives_2nd_order=False)
 
-    @abstractmethod
+        random_component = list(self.distribution_components.values())[0] # just to extract information that should be present in every component distribution
+        is_mtm = random_component.nlpdf_utils['mtm']
+        k_mtm = random_component.nlpdf_utils['k_mtm']
+
+        if pixelwise:
+            size_ = self.N if idx_pix is None else idx_pix.size
+            nlpdf_ = xp.zeros(size_) if not is_mtm else xp.zeros((size_, k_mtm,))
+        else:
+            nlpdf_ = 0.0 if not is_mtm else xp.zeros(k_mtm)
+        
+        for component in self.distribution_components.values():
+            nlpdf_ += component.neglog_pdf(pixelwise=pixelwise) # deriv_var_name will be useful solely for some component distributions
+
+        return nlpdf_
+
     def grad_neglog_pdf(
         self,
-        current: dict[dict[str, xp.ndarray]],
+        current: dict[dict[str, xp.ndarray]]=None,
         idx_pix: Optional[xp.ndarray] = None,
         update_nlpdf_utils: bool = True,
     ) -> xp.ndarray:
-        pass
+        if update_nlpdf_utils and current is None:
+            raise ValueError("current is None, cannot update nlpdf_utils")
+        elif update_nlpdf_utils and current is not None:
+            self.update_nlpdf_utils(current, idx_pix=idx_pix, compute_derivatives=True, compute_derivatives_2nd_order=False)
+
+        size_ = self.N if idx_pix is None else idx_pix.size
+        grad_ = xp.zeros((size_, *self.var_shape[1:]))
+
+        for component in self.distribution_components.values():
+            grad_ += component.gradient_neglog_pdf(deriv_var_name=self.var_name)
+
+        return grad_
     
-    @abstractmethod
     def hess_diag_neglog_pdf(
         self,
         current: dict[dict[str, xp.ndarray]] = None,
         idx_pix: Optional[xp.ndarray] = None,
         update_nlpdf_utils: bool = True,
     ) -> xp.ndarray:
-        pass
+        if update_nlpdf_utils and current is None:
+            raise ValueError("current is None, cannot update nlpdf_utils")
+        elif update_nlpdf_utils and current is not None:
+            self.update_nlpdf_utils(current, idx_pix=idx_pix, compute_derivatives=True, compute_derivatives_2nd_order=True)
+        
+        size_ = self.N if idx_pix is None else idx_pix.size
+        hess_diag_ = xp.zeros((size_, *self.var_shape[1:]))
+
+        for component in self.distribution_components.values():
+            hess_diag_ += component.hess_diag_neglog_pdf(deriv_var_name=self.var_name)
+        
+        return hess_diag_
 
     def compute_all_for_saver(
         self,
@@ -96,7 +135,7 @@ class FullConditional(TargetDistribution):
                 nlpdf_comp = component.neglog_pdf(full=True)
                 assert isinstance(
                     nlpdf_comp, xp.ndarray
-                ), "nlpdf_comp shoud be an array, check likelihood.neglog_pdf method"
+                ), "nlpdf_comp shoud be an array, check the component distribution 'neglog_pdf' method"
                 assert nlpdf_comp.shape == (
                     self.N,
                     self.L,
@@ -150,8 +189,8 @@ class FullConditional(TargetDistribution):
             nlpdf_utils['nlpdf_'+component_name] = nlpdf_comp_pixelwise.sum()
             if hasattr(component, 'forward_map'):
                 iterate['forward_map_evals_'+component_name] = component.forward_map_evals
-
-        iterate['var'] = current[self.var_name]["var"],
+        
+        iterate['var'] = current[self.var_name]["var"] * 1
         iterate["nlpdf_utils"] = nlpdf_utils,
         iterate["objective_pix"] = posterior_nlpdf_pix,
         iterate["objective"] = posterior_nlpdf_pix.sum()
@@ -189,5 +228,13 @@ class FullConditional(TargetDistribution):
             whether to use the MTM, by default False
         """
         for cd in self.distribution_components.values():
-            cd.evaluate_all_nlpdf_utils(current, idx_pix, compute_derivatives, compute_derivatives_2nd_order, mtm, deriv_var_name=self.var_name, **kwargs)
+            cd.evaluate_all_nlpdf_utils(
+                current=current,
+                idx_pix=idx_pix,
+                compute_derivatives=compute_derivatives, 
+                compute_derivatives_2nd_order=compute_derivatives_2nd_order,
+                mtm=mtm,
+                deriv_var_name=self.var_name,
+                **kwargs
+                )
 

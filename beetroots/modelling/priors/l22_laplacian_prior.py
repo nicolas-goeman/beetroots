@@ -34,7 +34,7 @@ def compute_laplacian_local(
         the laplacian of the candidates
     """
     # D = Var.shape[1]
-    laplacian_ = xp.zeros((idx_pix.shape[0], k_mtm, *Var.shape[2:]))  if k_mtm>0 else xp.zeros((idx_pix.shape[0], *Var.shape[1:])) # (n_pix, k_mtm, D) or (n_pix, D)
+    laplacian_ = xp.zeros((idx_pix.size, k_mtm, *Var.shape[2:]))  if k_mtm>0 else xp.zeros((idx_pix.shape[0], *Var.shape[1:])) # (n_pix, k_mtm, D) or (n_pix, D)
 
 
     for i, n in enumerate(idx_pix):
@@ -88,7 +88,7 @@ def compute_gradient_from_laplacian(
         g[edge[0]] += val
         g[edge[1]] -= val
 
-    return g  # (N, D)
+    return g  # (n_pix, k_mtm, D) or (n_pix, D)
 
 
 class L22LaplacianSpatialPrior(SpatialPrior):
@@ -138,31 +138,29 @@ class L22LaplacianSpatialPrior(SpatialPrior):
         return neglog_p  # (n_pix, k_mtm, D,) or (n_pix, D) or (D,) or (k_mtm, D) depending on the values of pixelwise and k_mtm
 
 
-    def gradient_neglog_pdf(self,) -> xp.ndarray:
+    def gradient_neglog_pdf(self, **kwargs) -> xp.ndarray:
         laplacian_ = self.nlpdf_utils['laplacian_local'] * 1
 
-        assert laplacian_.shape[0] == self.N
-        assert laplacian_.shape[-1]==self.D
+        assert laplacian_.shape[0] == self.nlpdf_utils['n_pix']
+        assert laplacian_.shape[-1]== self.D
 
-        g = compute_gradient_from_laplacian(laplacian_, self.list_edges)  # (N, D)
+        g = compute_gradient_from_laplacian(laplacian_, self.list_edges)  # (n_pix, k_mtm, D) or (n_pix, D)
         # g /= self.N * self.D
-        return self.weights[None, :] * g  # (N, D)
+        return self.weights[None, :] * g if self.nlpdf_utils['k_mtm'] == 0 else  self.weights[None, None, :] * g # (n_pix, k_mtm, D) or (n_pix, D)
 
-    def hess_diag_neglog_pdf(self,) -> xp.ndarray:
+    def hess_diag_neglog_pdf(self, **kwargs) -> xp.ndarray:
         laplacian_ = self.nlpdf_utils['laplacian_local'] * 1
         hess_diag = xp.zeros_like(laplacian_, dtype=xp.float64)
-        k_mtm = laplacian_.shape[1] if len(laplacian_.shape) == 3 else 0
 
         if self.list_edges.size > 0:
             idx, counts = xp.unique(self.list_edges.flatten(), return_counts=True)
             # print(counts.dtype, hess_diag.dtype)
-            if k_mtm == 0:
+            if self.nlpdf_utils['k_mtm'] == 0:
                 hess_diag[idx, :] += 2 * (counts * (counts + 1))[:, None] * xp.ones((idx.size, self.D))
             else:
-                hess_diag[idx, :, :] += 2 * (counts * (counts + 1))[:, None, None] * xp.ones((idx.size, k_mtm, self.D))
+                hess_diag[idx, :, :] += 2 * (counts * (counts + 1))[:, None, None] * xp.ones((idx.size, self.nlpdf_utils['k_mtm'], self.D))
 
-        # hess_diag /= self.N * self.D
-        return self.weights[None, :] * hess_diag  # (N, D)
+        return self.weights[None, :] * hess_diag if self.nlpdf_utils['k_mtm'] == 0 else self.weights[None, None, :] * hess_diag
 
     def evaluate_all_nlpdf_utils(
         self, 
@@ -180,7 +178,11 @@ class L22LaplacianSpatialPrior(SpatialPrior):
         assert Var.shape[0] == self.N
         assert Var.shape[-1]==self.D
 
+        idx_pix = xp.arange(self.N) if idx_pix is None else idx_pix
+
+        self.nlpdf_utils['mtm'] = mtm
         self.nlpdf_utils['k_mtm'] = Var.shape[1] if mtm else 0
-        self.nlpdf_utils['n_pix'] = idx_pix.size if idx_pix is not None else self.N
+        self.nlpdf_utils['n_pix'] = idx_pix.size
+
 
         self.nlpdf_utils['laplacian_local'] = compute_laplacian_local(Var, idx_pix, self.list_edges, self.nlpdf_utils['k_mtm'])

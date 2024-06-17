@@ -12,9 +12,11 @@ class ComponentDistribution(ABC):
 
     def __init__(
         self,
+        distribution_name: str = '',
         #vars_involved: Optional[Union[str, Tuple[str]]],
         **kwargs,
     ) -> None:
+        self.name = distribution_name
         self.nlpdf_utils = {}
 
         # self.vars_involved = set(vars_involved)

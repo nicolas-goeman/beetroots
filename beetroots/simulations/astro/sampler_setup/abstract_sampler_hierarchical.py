@@ -83,8 +83,10 @@ class SimulationHierarchical(SimulationTargetDistributionType):
             component_distributions["theta_spatial_prior"] = class_(**kwargs)
 
             dict_sites = component_distributions["theta_spatial_prior"].dict_sites
+            list_edges = component_distributions["theta_spatial_prior"].list_edges
+            weights = component_distributions["theta_spatial_prior"].weights
         else:
-            dict_sites = None
+            dict_sites, list_edges, weights = None, None, None
             raise Warning("no spatial prior for theta will be used as no component distribution with the key 'theta_spatial_prior' has been provided.")
         
         if "aux_given_theta" in component_distributions_names:
@@ -115,14 +117,23 @@ class SimulationHierarchical(SimulationTargetDistributionType):
                 
         # target distributions
         target_distributions = {}
+
         for i, (target_dist_name, list_component_dists) in enumerate(dict_target_distributions_match_components.items()):
-            component_distributions = [component_distributions[component_dist_name] for component_dist_name in list_component_dists]
+            component_distributions_target = {component_dist_name: component_distributions[component_dist_name] for component_dist_name in list_component_dists}
+            if 'theta' in target_dist_name:
+                var_shape = (self.N, self.D_sampling)
+            elif 'aux' in target_dist_name:
+                var_shape = (self.N, self.L)
+            else:
+                raise ValueError(f"target_dist_name must contain 'theta' or 'aux' but got {target_dist_name}")
+            
             target_distribution = FullConditional(
                     D=self.D_sampling,
                     L=self.L,
                     N=self.N,
-                    distribution_components=component_distributions,
+                    distribution_components=component_distributions_target,
                     var_name=target_dist_name,
+                    var_shape=var_shape,
                     dict_sites=dict_sites,
                 )
             target_distributions[target_dist_name] = target_distribution
@@ -137,8 +148,19 @@ class SimulationHierarchical(SimulationTargetDistributionType):
             "lower_bounds_lin": lower_bounds_lin,
             "upper_bounds_lin": upper_bounds_lin,
         }
-
-        return dict_models, scaler, params_plot_setup
+ 
+        proposal_distribution_params = {
+            "list_edges": list_edges,
+            "weights": weights,
+            "upper_bounds": upper_bounds,
+            "lower_bounds": lower_bounds,
+            "indicator_margin_scale": params_component_distributions["theta_indicator_prior"]['params']['indicator_margin_scale']
+            }
+        kwargs_proposal_distributions = {
+            "full_conditional_theta": proposal_distribution_params,
+            "full_conditional_auxiliary": proposal_distribution_params,
+        }
+        return dict_models, scaler, params_plot_setup, kwargs_proposal_distributions
 
     def inversion_optim_mle(self):
         pass
@@ -233,7 +255,7 @@ class SimulationHierarchical(SimulationTargetDistributionType):
         #
         batch_size: int = 10,
         freq_save: int = 1,
-        start_from: Optional[str] = None,
+        start_from: Optional[Union[str, dict]] = None,
         #
         regu_spatial_N0: Union[int, float] = xp.infty,
         regu_spatial_scale: Optional[float] = 1.0,

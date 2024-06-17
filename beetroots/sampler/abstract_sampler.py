@@ -96,7 +96,7 @@ class Sampler(abc.ABC):
         state["state"]["inc"] = loaded_inc
         self.rng.__setstate__(state)
 
-    def generate_random_start_Var(self, target_distribution: TargetDistribution):
+    def generate_random_start_Var(self, target_distribution: TargetDistribution, type: str = "gaussian") -> np.ndarray:
         r"""generates a random element of the hypercube defined by the lower and upper bounds with uniform distribution
 
         Parameters
@@ -125,11 +125,13 @@ class Sampler(abc.ABC):
                 )
                 + prior_indicator.lower_bounds[None, :]
             )
-
         else:
-            Theta = self.rng.standard_normal(size=target_distribution.var_shape)
+            Var = self.rng.standard_normal(size=target_distribution.var_shape)
 
-        return Theta
+        if type == "half-gaussian":
+            Var = np.abs(Var)
+
+        return Var
 
     # @abc.abstractmethod # TODO: check if there is a problem if we remove it (not necessary in MyGibbsSampler)
     # def generate_random_start_Theta_1pix(

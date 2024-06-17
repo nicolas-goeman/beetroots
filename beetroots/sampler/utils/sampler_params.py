@@ -91,6 +91,8 @@ class MyGibbsSamplerParams(object):
         "is_stochastic",
         "compute_correction_term",
         "proposal_distributions_mtm",
+        "model_checking_component_name",
+        "generate_random_start_type",
     )
 
     def __init__(
@@ -101,6 +103,7 @@ class MyGibbsSamplerParams(object):
         selection_probas: Union[dict[xp.ndarray], dict[List[float]], xp.ndarray, List[float]],
         k_mtm: Union[dict[int], int],
         proposal_distributions_mtm_params: dict[str],
+        generate_random_start_type: dict[str],
         is_stochastic: bool = True,
         compute_correction_term: Union[dict[bool], bool] = True,
         model_checking_component_name: str = None,
@@ -173,6 +176,12 @@ class MyGibbsSamplerParams(object):
         for v in is_stochastic.values():
             assert isinstance(v, bool)
 
+        assert isinstance(generate_random_start_type, dict)
+        assert all([k in proposal_distributions_mtm_params.keys() for k in generate_random_start_type.keys()])
+        for v in generate_random_start_type.values():
+            assert isinstance(v, str)
+        
+
         assert isinstance(compute_correction_term, bool)
 
         assert isinstance(model_checking_component_name, str)
@@ -197,3 +206,9 @@ class MyGibbsSamplerParams(object):
             self.proposal_distributions_mtm[key] = class_(**kwargs)
 
         self.model_checking_component_name = model_checking_component_name
+
+        self.generate_random_start_type = generate_random_start_type
+        for key in proposal_distributions_mtm_params.keys():
+            if key not in self.generate_random_start_type.keys():
+                self.generate_random_start_type[key] = None
+            

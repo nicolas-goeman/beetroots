@@ -96,7 +96,7 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
         self,
         current: dict[str, Union[dict, float, xp.ndarray]]=None,
         idx_pix: Optional[xp.ndarray] = None,
-        full: bool = False,
+        pixelwise: bool = False,
         update_nlpdf_utils: bool = True,
     ) -> float:
         if update_nlpdf_utils and current is None:
@@ -104,15 +104,15 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
         elif update_nlpdf_utils and current is not None:
             self.update_nlpdf_utils(current, idx_pix=idx_pix, compute_derivatives=False, compute_derivatives_2nd_order=False)
 
-        if full:
+        if pixelwise:
             size_ = self.N if idx_pix is None else idx_pix.size
             out = xp.zeros((size_, self.L)) if not self.likelihood.nlpdf_utils['mtm'] else xp.zeros((size_, self.likelihood.nlpdf_utils['k_mtm'], self.L))
         else:
             out = 0.0 if not self.likelihood.nlpdf_utils['mtm'] else xp.zeros((self.likelihood.nlpdf_utils['k_mtm']))
 
-        out += self.likelihood.neglog_pdf(full=full,) # NOTE: idx_pix not required because it is only required in the evaluate_all_nlpdf_utils method. It computes everything while taking care of nlpdf_utils.
+        out += self.likelihood.neglog_pdf(pixelwise=pixelwise,) # NOTE: idx_pix not required because it is only required in the evaluate_all_nlpdf_utils method. It computes everything while taking care of nlpdf_utils.
 
-        out += self.neglog_pdf_priors(pixelwise=full)
+        out += self.neglog_pdf_priors(pixelwise=pixelwise)
 
         # assert xp.sum(xp.isnan(nll)) == 0, xp.sum(xp.isnan(nll))
         # assert xp.sum(xp.isnan(nl_priors)) == 0, xp.sum(xp.isnan(nl_priors)) 
@@ -127,7 +127,7 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
         if update_nlpdf_utils and current is None:
             raise ValueError("current is None, cannot update nlpdf_utils")
         elif update_nlpdf_utils and current is not None:
-            self.update_nlpdf_utils(current, idx_pix=idx_pix, compute_derivatives=True, compute_derivatives_2nd_order=True)
+            self.update_nlpdf_utils(current, idx_pix=idx_pix, compute_derivatives=True, compute_derivatives_2nd_order=False)
 
         grad_ = self.likelihood.gradient_neglog_pdf()  # (N, D)
         # assert grad_.shape == (self.N, self.D), grad_nll.shape
