@@ -297,5 +297,7 @@ class Posterior(TargetDistribution): #TODO: generalize for any number of likelih
             iterate["grad"] = self.grad_neglog_pdf(update_nlpdf_utils=False)
             if compute_derivatives_2nd_order:
                 iterate["hess_diag"] = self.hess_diag_neglog_pdf(update_nlpdf_utils=False)
+            else:
+                iterate['hess_diag'] = None
 
         return iterate

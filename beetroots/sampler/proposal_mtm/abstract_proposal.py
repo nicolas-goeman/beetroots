@@ -59,6 +59,7 @@ class ProposalDistribution(abc.ABC):
         Var: xp.ndarray,
         idx_pix: xp.ndarray,
         k_mtm: int,
+        rng: xp.random.Generator,
     ) -> xp.ndarray:
         pass
 

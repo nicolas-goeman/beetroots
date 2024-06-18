@@ -76,7 +76,7 @@ class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, Simulation
         )
 
         # run setup
-        dict_models, scaler, params_plot_setup, kwargs_proposal_distributions = self.setup_target_distribution(
+        dict_models, scalers, params_plot_setup, kwargs_proposal_distributions = self.setup_target_distribution(
             scaler=scaler,
             forward_map=forward_map,
             y=y,
@@ -91,7 +91,7 @@ class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, Simulation
 
         return (
             dict_models,
-            scaler,
+            scalers,
             params_plot_setup,
             kwargs_proposal_distributions,
             y, # to initialize the auxiliary variable.
@@ -101,7 +101,7 @@ class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, Simulation
 
         (
             dict_models,
-            scaler,
+            scalers,
             params_plot_setup,
             kwargs_proposal_distributions,
             y,
@@ -123,7 +123,6 @@ class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, Simulation
 
         simulation.save_and_plot_setup(
             **params_plot_setup,
-            scaler=scaler,
         )
         
         # * Optim MAP
@@ -132,7 +131,7 @@ class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, Simulation
                 params['sampling_params']['map']['proposal_distributions_mtm_params'][k]['params'].update(kwargs_proposal_distributions[k])
             simulation.inversion_optim_map(
                 dict_models=dict_models,
-                scaler=scaler,
+                scaler=scalers,
                 my_sampler_params=MyGibbsSamplerParams(**params["sampling_params"]["map"]),
                 can_run_in_parallel=params["forward_model"]["force_use_cpu"],
                 **params["run_params"]["map"],
@@ -145,7 +144,7 @@ class SimulationToyCaseNNHierachical(SimulationNN, SimulationToyCase, Simulation
                 params['sampling_params']['mcmc']['proposal_distributions_mtm_params'][k]['params'].update(kwargs_proposal_distributions[k])
             simulation.inversion_mcmc(
                 dict_models=dict_models,
-                scaler=scaler,
+                scaler=scalers,
                 my_sampler_params=MyGibbsSamplerParams(**params["sampling_params"]["mcmc"]),
                 can_run_in_parallel=params["forward_model"]["force_use_cpu"],
                 **params["run_params"]["mcmc"],

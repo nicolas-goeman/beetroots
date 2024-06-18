@@ -371,7 +371,7 @@ class MyGibbsSampler(Sampler):
 
             # * if the memory is empty : initialize it
             # TODO: update this part for the Gibbs sampler. dict_objective is not correct here (only last variable). Should change the saver.
-            nll_full = xp.zeros(self.N, self.L)
+            nll_full = xp.zeros((self.N, self.L,))
             if saver.memory == {}:
                 for key in var_names:
                     additional_sampling_log[key]["v"] = self.v[key].reshape(self.current[key]["grad"].shape) * 1
@@ -396,7 +396,7 @@ class MyGibbsSampler(Sampler):
                     max_iter,
                     t,
                     current=self.current,
-                    nlpdf_utils=dict(), # FIXME: to change if we to store variables related to some component distributions. Previously it was used to keep track of parameters from the approximate likelihood.
+                    nlpdf_utils={var_name: dict() for var_name in var_names}, # FIXME: to change if we to store variables related to some component distributions. Previously it was used to keep track of parameters from the approximate likelihood.
                     dict_objective=dict_objective,
                     additional_sampling_log=additional_sampling_log,
                 )
@@ -406,7 +406,7 @@ class MyGibbsSampler(Sampler):
                 saver.update_memory(
                     t,
                     current=self.current,
-                    nlpdf_utils=dict(), # FIXME: to change if we to store variables related to some component distributions. Previously it was used to keep track of parameters from the approximate likelihood.
+                    nlpdf_utils={var_name: dict() for var_name in var_names}, # FIXME: to change if we to store variables related to some component distributions. Previously it was used to keep track of parameters from the approximate likelihood.
                     dict_objective=dict_objective,
                     additional_sampling_log=additional_sampling_log,
                     rng_state_array=rng_state_array,
@@ -439,7 +439,7 @@ class MyGibbsSampler(Sampler):
                 saver.update_memory(
                     t,
                     current=self.current,
-                    nlpdf_utils= dict(), # FIXME: to change if we to store variables related to some component distributions. Previously it was used to keep track of parameters from the approximate likelihood.
+                    nlpdf_utils= {var_name: dict() for var_name in var_names}, # FIXME: to change if we to store variables related to some component distributions. Previously it was used to keep track of parameters from the approximate likelihood.
                     dict_objective=dict_objective,
                     additional_sampling_log=additional_sampling_log,
                     rng_state_array=rng_state_array,
@@ -503,16 +503,15 @@ class MyGibbsSampler(Sampler):
         # n_sites = len(posterior.dict_sites)
         # idx_site = int(self.rng.integers(0, n_sites))
 
-        grad_idx, hess_diag_idx = None, None
         # TODO: generalize the use of dict_sites to all variables. Is it always present in the target_distribution?
         list_idx = xp.array(list(target_distribution.dict_sites.keys()))
 
-        for i, idx_site in enumerate(list_idx):
+        for idx_site in list_idx:
             idx_pix = target_distribution.dict_sites[idx_site]
             n_pix = idx_pix.size
 
             # --- PROPOSAL STEP ---
-            grad_t = grad_idx if i>0 else self.current[key]["grad"][idx_pix, :] * 1 
+            grad_t = self.current[key]["grad"][idx_pix] * 1
             v_current = self.v[key].reshape(new_var.shape)[idx_pix, :] * 1
 
             # generate random
@@ -528,7 +527,7 @@ class MyGibbsSampler(Sampler):
 
             # bias correction term
             if self.compute_correction_term:
-                hess_diag_t = hess_diag_idx if i>0 else self.current[key]["hess_diag"][idx_pix, :] * 1
+                hess_diag_t = self.current[key]["hess_diag"][idx_pix] * 1
                 j_t = self.j_t[key].reshape(new_var.shape)[idx_pix, :] * 1
 
                 correction = (
@@ -572,7 +571,7 @@ class MyGibbsSampler(Sampler):
             candidate_pixel[idx_pix, :] = mu_current * 1
 
             current_candidate[key] = {'var': candidate_pixel}
-            target_distribution.update_nlpdf_utils(current_candidate, idx_pix, compute_derivatives=True, compute_derivatives_2nd_order=True)
+            target_distribution.update_nlpdf_utils(current_candidate, idx_pix, compute_derivatives=True, compute_derivatives_2nd_order=self.compute_correction_term)
             candidate_all = {}
             candidate_all['objective_pix'] = target_distribution.neglog_pdf(pixelwise=True, update_nlpdf_utils=False, idx_pix=idx_pix)
             candidate_all['grad'] = target_distribution.grad_neglog_pdf(update_nlpdf_utils=False, idx_pix=idx_pix) # (N, D)
@@ -656,16 +655,11 @@ class MyGibbsSampler(Sampler):
 
             if accept_arr.max() > 0 and i<len(list_idx)-1:  # if at least one accept and not the last site group
                 # update the current variable for the next site group
-                current_candidate[key] = {'var': new_var}
-                target_distribution.update_nlpdf_utils(current_candidate, idx_pix, compute_derivatives=True, compute_derivatives_2nd_order=self.compute_correction_term)
-                grad_idx = target_distribution.grad_neglog_pdf(update_nlpdf_utils=False) # (N, D)
-                hess_diag_idx = target_distribution.hess_diag_neglog_pdf(update_nlpdf_utils=False) if self.compute_correction_term else None # (N, D)
-
-        self.current[key]['var'] = new_var * 1
-        self.current[key] = target_distribution.compute_all(
-            self.current,
-            compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
-        )
+                self.current[key]['var'] = new_var * 1
+                self.current[key] = target_distribution.compute_all(
+                    self.current,
+                    compute_derivatives_2nd_order=self.compute_derivatives_2nd_order,
+                )
 
         # after loop
         return accept_total.mean(), log_proba_accept_total.mean()
@@ -725,6 +719,7 @@ class MyGibbsSampler(Sampler):
             target_distribution.update_nlpdf_utils(current_candidates, idx_pix, compute_derivatives=False, compute_derivatives_2nd_order=False, mtm=True) # TODO: add the possibility to pass the idx_pix to the neglog_pdf method, improves the performance.
             neglogpdf_candidates = target_distribution.neglog_pdf(pixelwise=True, update_nlpdf_utils=False) # TODO: check if the shape corresponds to the expected one # We don't call the nlpdf_utils here but above since we want to add the mtm=True argument to the update_nlpdf_utils method.
             assert neglogpdf_candidates.shape == (n_pix, self.k_mtm[key] + 1,)
+            assert xp.isnan(neglogpdf_candidates).sum() == 0
 
             # candidates_pix = candidates_pix.reshape((n_pix, self.k_mtm + 1, self.D))
             # assert xp.allclose(candidates_pix[:, -1, :], self.current["Theta"][idx_pix, :]) -> validated

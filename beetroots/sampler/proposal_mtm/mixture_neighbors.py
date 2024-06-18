@@ -3,14 +3,14 @@ try :
 except :
     import numpy as xp
     
-from typing import Union
+from typing import Union, Optional
 
 from beetroots.sampler.utils import utils
 
 from beetroots.sampler.proposal_mtm.abstract_proposal import ProposalDistribution
 from beetroots.modelling.priors.smooth_indicator_prior import penalty_one_pix
 
-class ProposalNeighborsAndIndicator(ProposalDistribution):
+class ProposalNeighbors(ProposalDistribution):
     r"""Dataclass that implement the proposal distribution based on the smooth indicator prior and the spatial prior"""
 
     __slots__ = (
@@ -23,28 +23,17 @@ class ProposalNeighborsAndIndicator(ProposalDistribution):
 
     def __init__(
         self,
-        lower_bounds: xp.ndarray,
-        upper_bounds: xp.ndarray,
-        indicator_margin_scale: float,
         list_edges: xp.ndarray,
-        weights: xp.ndarray,
+        weights: Optional[Union[xp.ndarray, bool]] = False,
+        **kwargs: dict,
     ) -> None:
         r"""
         Parameters
         ----------
-        lower_bounds : xp.ndarray of shape (D,)
-            lower bounds of the indicator prior
-        upper_bounds : xp.ndarray of shape (D,)
-            upper bounds of the indicator prior
-        indicator_margin_scale : float
-            margin scale of the indicator prior
         list_edges : List[tuple[int, int]]
             list of edges
         weights : xp.ndarray of shape (n_edges,)
         """
-        self.lower_bounds = xp.asarray(lower_bounds)
-        self.upper_bounds = xp.asarray(upper_bounds)
-        self.margin_scale = indicator_margin_scale
         self.list_edges = list_edges
         self.weights = weights
     
@@ -78,13 +67,16 @@ class ProposalNeighborsAndIndicator(ProposalDistribution):
         """
         seed = rng.integers(0, 1_000_000_000)
 
-        samples = utils.sample_conditional_spatial_and_indicator_prior(
+
+        if self.weights is False:
+            weights = xp.ones(Var.shape[-1])
+        else:
+            weights = self.weights
+
+        samples = utils.sample_conditional_spatial_prior(
             Var,
             self.list_edges,
-            self.weights,
-            self.lower_bounds,
-            self.upper_bounds,
-            self.margin_scale,
+            spatial_weights=weights,
             idx_pix=idx_pix,
             k_mtm=k_mtm,
             seed=seed,
@@ -100,15 +92,15 @@ class ProposalNeighborsAndIndicator(ProposalDistribution):
         n_pix = idx_pix.size
         k_mtm = candidates.shape[1]
 
-        _pdf = penalty_one_pix(candidates[idx_pix].reshape(-1, *candidates.shape[2:]),
-                        self.lower_bounds,
-                        self.upper_bounds,
-                        self.margin_scale).reshape(n_pix, k_mtm, -1).sum(axis=-1)  # (n_pix * k_mtm)
-        
-        _pdf += utils.compute_nlpdf_spatial_prior_proposal(
+        if self.weights is False:
+            weights = xp.ones(candidates.shape[-1])
+        else:
+            weights = self.weights
+
+        _pdf = utils.compute_nlpdf_spatial_prior_proposal(
             candidates,
             self.list_edges,
-            self.weights,
+            weights,
             idx_pix)
         
         return _pdf.reshape((n_pix, k_mtm))

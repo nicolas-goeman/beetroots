@@ -1,12 +1,12 @@
 from typing import List, Optional
 
 import numba as nb
-try:
-    import cupy as xp
-    decorator_nb = nb.cuda.jit
-except:
-    import numpy as xp
-    decorator_nb = nb.njit
+# try:
+#     import cupy as xp
+#     decorator_nb = nb.cuda.jit
+# except:
+import numpy as xp
+decorator_nb = nb.njit
 
 from beetroots.modelling.priors.abstract_prior import PriorProbaDistribution
 
@@ -173,7 +173,9 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
 
     def neglog_pdf(
             self,
-            pixelwise: bool = False) -> xp.ndarray:
+            full: bool = False,
+            pixelwise: bool = False,
+            paramwise: bool = False,) -> xp.ndarray:
         r"""compute the negative log of the prior that approximates the indicator function
 
         .. math::
@@ -196,11 +198,22 @@ class SmoothIndicatorPrior(PriorProbaDistribution):
         neglog_p : xp.ndarray of shape (D,) or (N,)
             negative log of the smooth indicator prior pdf
         """
-        if pixelwise:
-            neglog_p = self.nlpdf_utils['nlpdf_full'].sum(axis=-1)  # (n_pix,) or (n_pix, k_mtm)
+        k_mtm = self.nlpdf_utils['k_mtm']
+        n_pix = self.nlpdf_utils['n_pix']
+
+        neglog_p = self.nlpdf_utils['nlpdf_full']
+
+        if full:
+            return neglog_p  # (n_pix, D) or (n_pix, k_mtm, D)
+        elif pixelwise:
+            neglog_p = neglog_p.sum(axis=tuple(range(1, neglog_p.ndim))) if k_mtm == 0 else neglog_p.sum(axis=tuple(range(2, neglog_p.ndim)))
+        elif paramwise:
+            neglog_p = neglog_p.sum(axis=0) if k_mtm == 0 else neglog_p.sum(axis=(0, 1))
         else:
-            neglog_p = self.nlpdf_utils['nlpdf_full'].sum(axis=0) # (D,) or (k_mtm, D)
-        return neglog_p
+            neglog_p = neglog_p.sum() if k_mtm == 0 else neglog_p.swapaxes(0, 1).sum(axis=tuple(range(1, neglog_p.ndim)))
+
+        # neglog_p /= self.N * self.D
+        return neglog_p  # (n_pix, k_mtm, D,) or (n_pix, D) or (D,) or (k_mtm, D) depending on the values of pixelwise and k_mtm
 
     # def neglog_pdf_one_pix(self, Var: xp.ndarray) -> xp.ndarray:
     #     r"""compute the negative log of the prior that approximates the indicator function

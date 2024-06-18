@@ -53,7 +53,7 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
         n_pix = self.nlpdf_utils['n_pix']
         N_pix = self.nlpdf_utils['N_pix']
         
-        assert xp.sum([pixelwise, full]) == 1
+        assert xp.sum([pixelwise, full]) <= 1
 
         out = xp.zeros((N_pix, self.L))
         out = self.nlpdf_utils['log_aux']
@@ -251,7 +251,7 @@ class AuxiliaryGivenTarget(Hierarchical): #TODO: check is Likelihood inheritance
         if idx_pix is not None:
             self.nlpdf_utils["aux"] = self.nlpdf_utils["aux"][idx_pix]
         if mtm:
-            self.nlpdf_utils["aux"] = self.nlpdf_utils["aux"].reshape(-1, *shape_var_target[2:])
+            self.nlpdf_utils["aux"] = self.nlpdf_utils["aux"].reshape(-1, *shape_var_aux[2:])
         self.nlpdf_utils["log_aux"] = xp.log(self.nlpdf_utils["aux"])
 
 
@@ -336,28 +336,20 @@ class ObservationsGivenAuxiliary(Likelihood):
     def neglog_pdf_u(
         self,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L))
 
-        out += xp.square(self.y-self.nlpdf_utils['aux'])
-        sigma_a2_broadcast = self.sigma_a2 if not self.nlpdf_utils['mtm'] else self.sigma_a2[:,None]
-        out /= 2*sigma_a2_broadcast
+        out += xp.square(self.nlpdf_utils["y"]-self.nlpdf_utils['aux'])
+        out /= 2*self.nlpdf_utils['sigma_a2']
         
         return out
     
     def neglog_pdf_c(
         self,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L))
         
-        if not self.nlpdf_utils['mtm']:
-            omega_broadcast = self.omega
-            sigma_a_broadcast = self.sigma_a
-        else:
-            omega_broadcast= self.omega[:,None]
-            sigma_a_broadcast = self.sigma_a[:,None]
-        
-        z = omega_broadcast - self.nlpdf_utils['aux']
-        z /= sigma_a_broadcast
+        z = self.nlpdf_utils['omega'] - self.nlpdf_utils['aux']
+        z /= self.nlpdf_utils['sigma_a']
 
         out -= log_ndtr(z)
 
@@ -369,17 +361,10 @@ class ObservationsGivenAuxiliary(Likelihood):
         full: bool = False,
         **kwargs: dict,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
-
-        if not self.nlpdf_utils['mtm']:
-            omega_broadcast = self.omega
-            y_broadcast = self.y
-        else:
-            omega_broadcast = self.omega[:,None]
-            y_broadcast = self.y[:,None]
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L))
 
         out += xp.where(
-            (omega_broadcast==y_broadcast),
+            (self.nlpdf_utils['omega']==self.nlpdf_utils['y']),
             self.nlpdf_utils["nlpdf_c"],
             self.nlpdf_utils["nlpdf_u"],
         )
@@ -405,37 +390,23 @@ class ObservationsGivenAuxiliary(Likelihood):
     def gradient_neglog_pdf_u(
         self,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
-
-        if not self.nlpdf_utils['mtm']:
-            y_broadcast = self.y
-            sigma_a2_broadcast = self.sigma_a2
-        else:
-            y_broadcast= self.y[: None]
-            sigma_a2_broadcast = self.sigma_a2[:,None]
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L))
         
-        out -= y_broadcast-self.nlpdf_utils['aux']
-        out /= sigma_a2_broadcast
+        out -= self.nlpdf_utils['y']-self.nlpdf_utils['aux']
+        out /= self.nlpdf_utils['sigma_a2']
         
         return out
     
     def gradient_neglog_pdf_c(
         self,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L))
         
-        if not self.nlpdf_utils['mtm']:
-            omega_broadcast = self.omega
-            sigma_a_broadcast = self.sigma_a
-        else:
-            omega_broadcast= self.omega[:,None]
-            sigma_a_broadcast = self.sigma_a[:,None]
-        
-        z = omega_broadcast - self.nlpdf_utils['aux']
-        z /= sigma_a_broadcast
+        z = self.nlpdf_utils['omega'] - self.nlpdf_utils['aux']
+        z /= self.nlpdf_utils['sigma_a']
 
         out += utils.norm_pdf_cdf_ratio(z)
-        out /= sigma_a_broadcast
+        out /= self.nlpdf_utils['sigma_a']
 
         return out
 
@@ -445,17 +416,10 @@ class ObservationsGivenAuxiliary(Likelihood):
         full: bool = False,
         **kwargs: dict,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
-
-        if not self.nlpdf_utils['mtm']:
-            omega_broadcast = self.omega
-            y_broadcast = self.y
-        else:
-            omega_broadcast = self.omega[:,None]
-            y_broadcast = self.y[:,None]
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L))
 
         out += xp.where(
-            (omega_broadcast==y_broadcast),
+            (self.nlpdf_utils['omega']==self.nlpdf_utils['y']),
             self.nlpdf_utils["grad_nlpdf_c"],
             self.nlpdf_utils["grad_nlpdf_u"],
         )
@@ -480,36 +444,24 @@ class ObservationsGivenAuxiliary(Likelihood):
     
     def hess_diag_diag_neglog_pdf_u(
         self,
-        y: xp.ndarray,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L))
 
-        sigma_a2_broadcast = self.sigma_a2 if not self.nlpdf_utils['mtm'] else self.sigma_a2[:,None]
-
-        out /= sigma_a2_broadcast
+        out /= self.nlpdf_utils['sigma_a2']
         
         return out
     
     def hess_diag_diag_neglog_pdf_c(
         self,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L))
 
-        if not self.nlpdf_utils['mtm']:
-            omega_broadcast = self.omega
-            sigma_a_broadcast = self.sigma_a
-            sigma_a2_broadcast = self.sigma_a2
-        else:
-            omega_broadcast= self.omega[:,None]
-            sigma_a_broadcast = self.sigma_a[:,None]
-            sigma_a2_broadcast = self.sigma_a2[:,None]
-        
-        z = omega_broadcast - self.nlpdf_utils['aux']
-        z /= sigma_a_broadcast
+        z = self.nlpdf_utils['omega'] - self.nlpdf_utils['aux']
+        z /= self.nlpdf_utils['sigma_a']
 
         out += xp.square(utils.norm_pdf_cdf_ratio(z))
         out += utils.norm_pdf_cdf_ratio(z)*z
-        out /= sigma_a2_broadcast
+        out /= self.nlpdf_utils['sigma_a2']
 
         return out
 
@@ -519,19 +471,10 @@ class ObservationsGivenAuxiliary(Likelihood):
         full: bool = False,
         **kwargs: dict,
     ) -> Union[float, xp.ndarray]:
-        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros(self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L)
-
-        omega_broadcast = self.omega if not self.nlpdf_utils['mtm'] else self.omega[:,None]
-
-        if not self.nlpdf_utils['mtm']:
-            omega_broadcast = self.omega
-            y_broadcast = self.y
-        else:
-            omega_broadcast = self.omega[:,None]
-            y_broadcast = self.y[:,None]
+        out = xp.zeros((self.nlpdf_utils['n_pix'], self.L)) if not self.nlpdf_utils['mtm'] else xp.zeros((self.nlpdf_utils['n_pix'], self.nlpdf_utils['k_mtm'], self.L))
 
         out += xp.where(
-            (omega_broadcast==y_broadcast),
+            (self.nlpdf_utils['omega']==self.nlpdf_utils['y']),
             self.nlpdf_utils["hess_diag_diag_nlpdf_c"],
             self.nlpdf_utils["hess_diag_diag_nlpdf_u"],
         )
@@ -572,6 +515,21 @@ class ObservationsGivenAuxiliary(Likelihood):
         self.nlpdf_utils['mtm'] = mtm
         self.nlpdf_utils['k_mtm'] = original_var_shape[1] if mtm else 0
         self.nlpdf_utils['n_pix'] = idx_pix.size if idx_pix is not None else self.N
+
+        idx_pix = xp.arange(self.nlpdf_utils['n_pix']) if idx_pix is None else idx_pix
+
+        self.nlpdf_utils['aux'] = current[self.var_name]["var"][idx_pix]
+
+        if mtm:
+            self.nlpdf_utils['sigma_a'] = self.sigma_a[idx_pix, xp.newaxis, ...]
+            self.nlpdf_utils['sigma_a2'] = self.sigma_a2[idx_pix, xp.newaxis, ...]
+            self.nlpdf_utils['omega'] = self.omega[idx_pix, xp.newaxis, ...]
+            self.nlpdf_utils['y'] = self.y[idx_pix, xp.newaxis, ...]
+        else:
+            self.nlpdf_utils['sigma_a'] = self.sigma_a[idx_pix]
+            self.nlpdf_utils['sigma_a2'] = self.sigma_a2[idx_pix]
+            self.nlpdf_utils['omega'] = self.omega[idx_pix]
+            self.nlpdf_utils['y'] = self.y[idx_pix]
 
         self.nlpdf_utils["nlpdf_c"] = self.neglog_pdf_c()
         self.nlpdf_utils["nlpdf_u"] = self.neglog_pdf_u()

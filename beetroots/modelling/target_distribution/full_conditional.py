@@ -64,15 +64,16 @@ class FullConditional(TargetDistribution):
         random_component = list(self.distribution_components.values())[0] # just to extract information that should be present in every component distribution
         is_mtm = random_component.nlpdf_utils['mtm']
         k_mtm = random_component.nlpdf_utils['k_mtm']
+        n_pix = random_component.nlpdf_utils['n_pix']
 
         if pixelwise:
-            size_ = self.N if idx_pix is None else idx_pix.size
-            nlpdf_ = xp.zeros(size_) if not is_mtm else xp.zeros((size_, k_mtm,))
+            nlpdf_ = xp.zeros(n_pix) if not is_mtm else xp.zeros((n_pix, k_mtm,))
         else:
             nlpdf_ = 0.0 if not is_mtm else xp.zeros(k_mtm)
         
         for component in self.distribution_components.values():
-            nlpdf_ += component.neglog_pdf(pixelwise=pixelwise) # deriv_var_name will be useful solely for some component distributions
+            comp_nlpdf = component.neglog_pdf(pixelwise=pixelwise)
+            nlpdf_ += comp_nlpdf # deriv_var_name will be useful solely for some component distributions
 
         return nlpdf_
 
@@ -126,10 +127,11 @@ class FullConditional(TargetDistribution):
         posterior_nlpdf = 0.
         nll_full = xp.zeros((self.N, self.L))
         for component_name, component in self.distribution_components.items():
+            component.evaluate_all_nlpdf_utils(current, idx_pix=None, compute_derivatives=False, compute_derivatives_2nd_order=False, mtm=False)
             if isinstance(component, PriorProbaDistribution):
                 nll_comp = component.neglog_pdf(paramwise=True)
                 nll_comp_float = nll_comp.sum()
-                dict_objective["nlpdf_"+component_name] =  nll_comp_float # float
+                dict_objective["nlpdf_"+component_name] =  nll_comp # (D,)
                 posterior_nlpdf += nll_comp_float
             elif component_name == model_checking_component_name:
                 nlpdf_comp = component.neglog_pdf(full=True)
@@ -191,14 +193,16 @@ class FullConditional(TargetDistribution):
                 iterate['forward_map_evals_'+component_name] = component.forward_map_evals
         
         iterate['var'] = current[self.var_name]["var"] * 1
-        iterate["nlpdf_utils"] = nlpdf_utils,
-        iterate["objective_pix"] = posterior_nlpdf_pix,
+        iterate["nlpdf_utils"] = nlpdf_utils
+        iterate["objective_pix"] = posterior_nlpdf_pix
         iterate["objective"] = posterior_nlpdf_pix.sum()
 
         if compute_derivatives:
             iterate["grad"] = self.grad_neglog_pdf(update_nlpdf_utils=False)
             if compute_derivatives_2nd_order:
                 iterate["hess_diag"] = self.hess_diag_neglog_pdf(update_nlpdf_utils=False)
+            else:
+                iterate["hess_diag"] = None
 
         return iterate
 

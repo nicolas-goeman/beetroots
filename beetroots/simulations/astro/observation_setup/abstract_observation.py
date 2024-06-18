@@ -23,7 +23,6 @@ class SimulationObservation(AstroSimulation, abc.ABC):
         omega: np.ndarray,
         lower_bounds_lin: np.ndarray,
         upper_bounds_lin: np.ndarray,
-        scaler: Scaler,
     ):
         if self.N > 1:
 
@@ -62,7 +61,7 @@ class SimulationObservation(AstroSimulation, abc.ABC):
                     :, self.list_idx_sampling
                 ] = self.Theta_true_scaled
 
-                Theta_true_lin = scaler.from_scaled_to_lin(Theta_true_scaled_full)
+                Theta_true_lin = self.Theta_true_scaled_scaler.from_scaled_to_lin(Theta_true_scaled_full)
 
                 for d in range(self.D):
                     if self.list_fixed_values[d] is not None:

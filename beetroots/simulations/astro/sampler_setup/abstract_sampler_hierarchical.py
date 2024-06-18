@@ -20,12 +20,13 @@ from beetroots.modelling.priors.l22_laplacian_prior import L22LaplacianSpatialPr
 from beetroots.modelling.priors.smooth_indicator_prior import SmoothIndicatorPrior
 from beetroots.modelling.priors.spatial_prior_params import SpatialPriorParams
 from beetroots.sampler.my_gibbs_sampler import MyGibbsSampler
-from beetroots.sampler.saver.my_saver import MySaver
+from beetroots.sampler.saver.my_gibbs_saver import MyGibbsSaver
 from beetroots.sampler.utils.sampler_params import MyGibbsSamplerParams
 from beetroots.simulations.astro.sampler_setup.abstract_sampler_approach import (
     SimulationTargetDistributionType,
 )
 from beetroots.space_transform.transform import MyScaler
+from beetroots.space_transform.id_transform import IdScaler
 
 import importlib
 
@@ -149,18 +150,24 @@ class SimulationHierarchical(SimulationTargetDistributionType):
             "upper_bounds_lin": upper_bounds_lin,
         }
  
-        proposal_distribution_params = {
+        proposal_distribution_params_theta = {
             "list_edges": list_edges,
             "weights": weights,
-            "upper_bounds": upper_bounds,
-            "lower_bounds": lower_bounds,
+            "upper_bounds": upper_bounds[self.list_idx_sampling],
+            "lower_bounds": lower_bounds[self.list_idx_sampling],
             "indicator_margin_scale": params_component_distributions["theta_indicator_prior"]['params']['indicator_margin_scale']
             }
+        
+        proposal_distribution_params_aux = proposal_distribution_params_theta.copy()
+        proposal_distribution_params_aux.update({'weights': False,})
+        
         kwargs_proposal_distributions = {
-            "full_conditional_theta": proposal_distribution_params,
-            "full_conditional_auxiliary": proposal_distribution_params,
+            "full_conditional_theta": proposal_distribution_params_theta,
+            "full_conditional_auxiliary": proposal_distribution_params_aux,
         }
-        return dict_models, scaler, params_plot_setup, kwargs_proposal_distributions
+
+        scalers = {"full_conditional_theta": scaler, 'full_conditional_auxiliary': IdScaler()}
+        return dict_models, scalers, params_plot_setup, kwargs_proposal_distributions
 
     def inversion_optim_mle(self):
         pass
@@ -275,7 +282,7 @@ class SimulationHierarchical(SimulationTargetDistributionType):
 
         sampler_ = MyGibbsSampler(my_sampler_params, self.D_sampling, self.L, self.N)
 
-        saver_ = MySaver(
+        saver_ = MyGibbsSaver(
             self.N,
             self.D,
             self.D_sampling,

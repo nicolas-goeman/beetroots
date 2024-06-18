@@ -156,7 +156,6 @@ class SimulationToyCaseNN(SimulationNN, SimulationToyCase, SimulationMySampler):
                 os.mkdir(folder_path)
         simulation.save_and_plot_setup(
             **params_plot_setup,
-            scaler,
         )
         # * Optim MAP
         if params["to_run_optim_map"]:

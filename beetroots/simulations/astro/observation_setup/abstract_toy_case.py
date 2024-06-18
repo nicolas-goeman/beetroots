@@ -36,6 +36,7 @@ class SimulationToyCase(SimulationObservation):
         # * generate observations for specified lines
         self.Theta_true_scaled = syn_map.loc[:, self.list_names].values
         self.Theta_true_scaled = self.Theta_true_scaled[:, self.list_idx_sampling]
+        self.Theta_true_scaled_scaler = scaler
 
         syn_map.loc[:, self.list_lines_fit] = forward_map.evaluate(
             self.Theta_true_scaled,

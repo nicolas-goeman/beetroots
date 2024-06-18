@@ -86,7 +86,14 @@ class MyGibbsSaver(Saver):
         t_save = (t - self.t_last_init) // self.freq_save
 
         for key in current.keys():
-            self.memory[key]['list_var'][t_save] = self.scaler.from_scaled_to_lin(current[key]['var']) # FIXME: we assume here that every variables need to be scaled back to the linear space.
+            Var = current[key]['var']
+            if hasattr(self.scaler[key], 'D'): # For the variable of interest. We might not have sampled every component.
+                Var_full = xp.zeros((*Var.shape[:-1], self.D))
+                for i, idx in enumerate(self.list_idx_sampling):
+                    Var_full[:, idx] = Var[:, i]
+                self.memory[key]['list_var'][t_save] = self.scaler[key].from_scaled_to_lin(Var_full)[..., self.list_idx_sampling] # FIXME: we assume here that every variables need to be scaled back to the linear space.
+            else:
+                self.memory[key]['list_var'][t_save] = self.scaler[key].from_scaled_to_lin(Var)
 
             if self.save_forward_map_evals and 'forward_map_evals' in current[key].keys():
                 for k, v in current[key]['forward_map_evals'].items():

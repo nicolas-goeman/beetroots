@@ -45,7 +45,7 @@ class RunMCMC(Run):
         dict_posteriors: dict[str, Union[Posterior, dict[str, TargetDistribution]]],
         path_raw: str,
         N_runs: int,
-        scaler: Scaler,
+        scaler: Union[Scaler, dict[str, Scaler]],
         start_from: Optional[Union[str, dict]],
         path_csv_mle: Optional[str],
         path_csv_map: Optional[str],
@@ -89,6 +89,7 @@ class RunMCMC(Run):
         # step 2 : read Vars_0 if needed
         model_name = list(dict_posteriors.keys())[0]
         if isinstance(dict_posteriors[model_name], Posterior):
+            assert isinstance(scaler, Scaler)
             assert isinstance(start_from, str) or isinstance(start_from, np.ndarray) or start_from is None
             if isinstance(start_from, str):
                 assert start_from in ["MLE", "MAP"]
@@ -116,6 +117,8 @@ class RunMCMC(Run):
                 Vars_0 = None
 
         elif isinstance(dict_posteriors[model_name], dict):
+            assert isinstance(scaler, dict)
+            assert set(dict_posteriors[model_name].keys()) == set(scaler.keys())
             assert list(start_from.keys()) == list(dict_posteriors[model_name].keys())
             Vars_0 = dict()
             for key, value in start_from.items():
@@ -128,7 +131,7 @@ class RunMCMC(Run):
                             path_csv_mle,
                             model_name,
                         )
-                        Vars_0[key] = scaler.from_lin_to_scaled(temp)
+                        Vars_0[key] = scaler[key].from_lin_to_scaled(temp)
                         warnings.warn('Var starting state assumed to be in scaled space')
                     elif value == "MAP":
                         assert path_csv_map is not None
@@ -136,7 +139,7 @@ class RunMCMC(Run):
                             path_csv_map,
                             model_name,
                         )
-                        Vars_0[key] = scaler.from_lin_to_scaled(temp)
+                        Vars_0[key] = scaler[key].from_lin_to_scaled(temp)
                         warnings.warn('Var starting state assumed to be in scaled space')
                 elif isinstance(value, np.ndarray):
                     temp = value * 1

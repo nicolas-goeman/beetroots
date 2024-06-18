@@ -30,11 +30,11 @@ def compute_laplacian_local(
 
     Returns
     -------
-    laplacian_ : xp.ndarray of shape (N_candidates, D)
+    laplacian : xp.ndarray of shape (N_candidates, D)
         the laplacian of the candidates
     """
     # D = Var.shape[1]
-    laplacian_ = xp.zeros((idx_pix.size, k_mtm, *Var.shape[2:]))  if k_mtm>0 else xp.zeros((idx_pix.shape[0], *Var.shape[1:])) # (n_pix, k_mtm, D) or (n_pix, D)
+    laplacian = xp.zeros((idx_pix.size, k_mtm, *Var.shape[2:]))  if k_mtm>0 else xp.zeros((idx_pix.shape[0], *Var.shape[1:])) # (n_pix, k_mtm, D) or (n_pix, D)
 
 
     for i, n in enumerate(idx_pix):
@@ -42,30 +42,30 @@ def compute_laplacian_local(
         mask_i_p = list_edges[:, 0] == n
 
         if k_mtm == 0:
-            laplacian_[i] += xp.sum(
+            laplacian[i] += xp.sum(
                     (Var[list_edges[mask_i_p, 1]] - Var[list_edges[mask_i_p, 0]]),
                     axis=0,
                 )  # (k_mtm, D,)
-            laplacian_[i] -= xp.sum(
+            laplacian[i] -= xp.sum(
                 (Var[list_edges[mask_i_m, 1]] - Var[list_edges[mask_i_m, 0]]),
                 axis=0,
             )  # (k_mtm, D,)
-    else: 
+        else: 
             for j in range(k_mtm):
-                laplacian_[i, j] += xp.sum(
+                laplacian[i, j] += xp.sum(
                     (Var[list_edges[mask_i_p, 1], j] - Var[list_edges[mask_i_p, 0], j]),
                     axis=0,
                 )  # (k_mtm, D,)
-                laplacian_[i, j] -= xp.sum(
+                laplacian[i, j] -= xp.sum(
                     (Var[list_edges[mask_i_m, 1], j] - Var[list_edges[mask_i_m, 0], j]),
                     axis=0,
                 )  # (k_mtm, D,)
-    return laplacian_  # (n_pix, k_mtm, D) or (n_pix, D)
+    return laplacian  # (n_pix, k_mtm, D) or (n_pix, D)
 
 
-@decorator_nb()
+# @decorator_nb()
 def compute_gradient_from_laplacian(
-    laplacian_: xp.ndarray, list_edges: xp.ndarray
+    laplacian: xp.ndarray, list_edges: xp.ndarray, idx_pix: xp.ndarray,
 ) -> xp.ndarray:
     """evaluates the gradient from the Laplacian matrix
 
@@ -81,14 +81,22 @@ def compute_gradient_from_laplacian(
     xp.ndarray
         _description_
     """
-    g = xp.zeros_like(laplacian_)
+    g = xp.zeros_like(laplacian) # (n_pix, k_mtm, D) or (n_pix, D)
 
     for edge in list_edges:
-        val = 2 * (laplacian_[edge[1]] - laplacian_[edge[0]])  # (D,)
+        val = 2 * (laplacian[edge[1]] - laplacian[edge[0]])  # (D,)
         g[edge[0]] += val
         g[edge[1]] -= val
 
-    return g  # (n_pix, k_mtm, D) or (n_pix, D)
+    # TODO: """New version to directly use idx_pix instead of having the whole map. To be tested."""
+    # for idx in idx_pix:
+    #     mask_i_m = list_edges[:, 1] == idx
+    #     mask_i_p = list_edges[:, 0] == idx
+
+    #     g[idx] += 2* (laplacian[list_edges[mask_i_p][:,1]] - laplacian[idx][None,...])  # (k_mtm, D,
+    #     g[idx] -= 2* (laplacian[idx][None, ...] - laplacian[list_edges[mask_i_m][:,0]])
+    
+    return g[idx_pix]  # (n_pix, k_mtm, D) or (n_pix, D)
 
 
 class L22LaplacianSpatialPrior(SpatialPrior):
@@ -111,12 +119,14 @@ class L22LaplacianSpatialPrior(SpatialPrior):
         k_mtm = self.nlpdf_utils['k_mtm']
         n_pix = self.nlpdf_utils['n_pix']
         
-        assert xp.sum([pixelwise, paramwise, full]) == 1
+        assert xp.sum([pixelwise, paramwise, full]) <= 1
 
         neglog_p = xp.zeros((n_pix, k_mtm, self.D)) if k_mtm > 0 else xp.zeros((n_pix, self.D))
 
         if self.list_edges.size > 0:
             laplacian_ = self.nlpdf_utils['laplacian_local'] * 1
+            if self.nlpdf_utils['compute_derivatives']:
+                laplacian_ = laplacian_[self.nlpdf_utils['idx_pix']]
             neglog_p += laplacian_**2  # (n_pix,D)
 
         if with_weights:
@@ -141,12 +151,12 @@ class L22LaplacianSpatialPrior(SpatialPrior):
     def gradient_neglog_pdf(self, **kwargs) -> xp.ndarray:
         laplacian_ = self.nlpdf_utils['laplacian_local'] * 1
 
-        assert laplacian_.shape[0] == self.nlpdf_utils['n_pix']
+        assert laplacian_.shape[0] == self.N
         assert laplacian_.shape[-1]== self.D
 
-        g = compute_gradient_from_laplacian(laplacian_, self.list_edges)  # (n_pix, k_mtm, D) or (n_pix, D)
+        g_ = compute_gradient_from_laplacian(laplacian_, self.list_edges, self.nlpdf_utils['idx_pix'])  # (n_pix, k_mtm, D) or (n_pix, D)
         # g /= self.N * self.D
-        return self.weights[None, :] * g if self.nlpdf_utils['k_mtm'] == 0 else  self.weights[None, None, :] * g # (n_pix, k_mtm, D) or (n_pix, D)
+        return self.weights[None, :] * g_ if self.nlpdf_utils['k_mtm'] == 0 else  self.weights[None, None, :] * g_ # (n_pix, k_mtm, D) or (n_pix, D)
 
     def hess_diag_neglog_pdf(self, **kwargs) -> xp.ndarray:
         laplacian_ = self.nlpdf_utils['laplacian_local'] * 1
@@ -183,6 +193,11 @@ class L22LaplacianSpatialPrior(SpatialPrior):
         self.nlpdf_utils['mtm'] = mtm
         self.nlpdf_utils['k_mtm'] = Var.shape[1] if mtm else 0
         self.nlpdf_utils['n_pix'] = idx_pix.size
+        self.nlpdf_utils['idx_pix'] = idx_pix
 
-
-        self.nlpdf_utils['laplacian_local'] = compute_laplacian_local(Var, idx_pix, self.list_edges, self.nlpdf_utils['k_mtm'])
+        if compute_derivatives:
+            self.nlpdf_utils['laplacian_local'] = compute_laplacian_local(Var, xp.arange(self.N), self.list_edges, self.nlpdf_utils['k_mtm']) # if we compute the gradient, we need to compute the laplacian for every pixel.
+            self.nlpdf_utils['compute_derivatives'] = True
+        else:
+            self.nlpdf_utils['laplacian_local'] = compute_laplacian_local(Var, idx_pix, self.list_edges, self.nlpdf_utils['k_mtm'])
+            self.nlpdf_utils['compute_derivatives'] = False
