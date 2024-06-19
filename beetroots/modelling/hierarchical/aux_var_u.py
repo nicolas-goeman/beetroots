@@ -501,9 +501,9 @@ class ObservationsGivenAuxiliary(Likelihood):
         self, 
         current: dict[str, dict],
         idx_pix: Optional[xp.ndarray],
-        compute_derivatives: bool,
-        compute_derivatives_2nd_order: bool,
-        mtm: bool,
+        compute_derivatives: bool = True,
+        compute_derivatives_2nd_order: bool = True,
+        mtm: bool = False,
         **kwargs: dict,
         ) -> None:
         self.nlpdf_utils = dict()
@@ -548,7 +548,7 @@ class ObservationsGivenAuxiliary(Likelihood):
         rng: xp.random.Generator = xp.random.default_rng(),
     ) -> xp.ndarray:
         
-        out = self.nlpdf_utils['aux'] + self.sigma_a*rng.normal(loc=0, scale=1, size=self.nlpdf_utils['aux'].shape), # scale is the std not variance, better to put everything outside to avoid mistakes
+        out = self.nlpdf_utils['aux'] + self.sigma_a*rng.normal(loc=0, scale=1, size=self.nlpdf_utils['aux'].shape) # scale is the std not variance, better to put everything outside to avoid mistakes
     
         return out
     

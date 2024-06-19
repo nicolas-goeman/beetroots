@@ -109,8 +109,8 @@ sampling_params:
         class_name: "ProposalNeighborsAndIndicator"
         params: {}
       full_conditional_auxiliary:
-        module_name : "mixture_neighbors"
-        class_name: "ProposalNeighbors"
+        module_name : "mixture_neighbors_indicator"
+        class_name: "ProposalNeighborsAndIndicator"
         params: {}
     generate_random_start_type: {}
     

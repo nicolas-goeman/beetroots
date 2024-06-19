@@ -7,7 +7,7 @@ import numba as nb
 #     decorator_nb = nb.cuda.jit
 # except:
 import numpy as xp
-from scipy.stats import norm
+from numba_stats import norm
 decorator_nb = nb.njit
 
 from scipy.special import gamma, ndtr
@@ -133,7 +133,7 @@ def get_neighboring_pixels(
     return current_Theta[list_neighbors_idx, :]  # (n_neighbors, D)
 
 
-@decorator_nb()
+# @decorator_nb()
 def sample_conditional_spatial_and_indicator_prior(
     current_Theta: xp.ndarray,
     spatial_list_edges: xp.ndarray,
@@ -173,14 +173,13 @@ def sample_conditional_spatial_and_indicator_prior(
     xp.ndarray
         samples drawn from the conditional prior
     """
-    # FIXME: while loop in the code is not good. Modify proposal for box constraints.
     xp.random.seed(seed)
     (N, D) = current_Theta.shape
     n_pix = idx_pix.size * 1
 
     samples = xp.zeros((n_pix, k_mtm, D))
     i = 0
-    for idx_1_pix in idx_pix:
+    for j, idx_1_pix in enumerate(idx_pix):
         # * sample from around neighbors
         neighbors = get_neighboring_pixels(current_Theta, spatial_list_edges, idx_1_pix)
         N_neighbors = neighbors.shape[0]
@@ -210,15 +209,19 @@ def sample_conditional_spatial_and_indicator_prior(
                     # mean[d] = xp.mean(neighbors[:, d])
 
                 # * sample a float between 0 and 1
-                u = xp.random.uniform(0, 1, 1)
+                u = xp.random.uniform(0, 1)
                 # * generate candidates
-                q_lower = xp.zeros(D)
-                q_upper = xp.zeros(D)
+                q_lower = xp.zeros(D, dtype=xp.float64)
+                q_upper = xp.zeros(D, dtype=xp.float64)
+                mean = xp.asarray(mean, dtype=xp.float64)
+                sigma_mtm_eff = xp.asarray(sigma_mtm_eff, dtype=xp.float64)
+                if j==0 and k==0: #FIXME: remove this if statement after tests
+                    pass
                 for d in range(D):
-                    q_lower[d] = norm.cdf(indicator_lower_bounds[d], loc=mean[d], scale=sigma_mtm_eff[d])
-                    q_upper[d] = norm.cdf(indicator_upper_bounds[d], loc=mean[d], scale=sigma_mtm_eff[d])
-                    z = q_lower[d] + u*(q_upper[d] - q_lower[d])
-                    Theta[k, d] = norm.ppf(z, loc=mean[d], scale=sigma_mtm_eff[d])
+                    q_lower[d] = norm.cdf(indicator_lower_bounds[d:d+1].astype(xp.float64), loc=mean[d], scale=sigma_mtm_eff[d])[0]
+                    q_upper[d] = norm.cdf(indicator_upper_bounds[d:d+1].astype(xp.float64), loc=mean[d], scale=sigma_mtm_eff[d])[0]
+                    z = q_lower[d:d+1] + u*(q_upper[d:d+1] - q_lower[d:d+1])
+                    Theta[k, d] = norm.ppf(z.astype(xp.float64), loc=mean[d], scale=sigma_mtm_eff[d])[0]
 
             samples[i, :, :] = Theta * 1  # (k_mtm, D)
 

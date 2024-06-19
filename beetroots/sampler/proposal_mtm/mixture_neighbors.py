@@ -19,14 +19,12 @@ class ProposalNeighbors(ProposalDistribution):
         "margin_scale",
         "list_edges",
         "weights",
-        "std_correction",
     )
 
     def __init__(
         self,
         list_edges: xp.ndarray,
         weights: Optional[Union[xp.ndarray, bool]] = False,
-        std_correction: Optional[float] = 1,
         **kwargs: dict,
     ) -> None:
         r"""
@@ -38,7 +36,6 @@ class ProposalNeighbors(ProposalDistribution):
         """
         self.list_edges = list_edges
         self.weights = weights
-        self.std_correction = std_correction
     
     def sample(
         self,
@@ -83,7 +80,6 @@ class ProposalNeighbors(ProposalDistribution):
             idx_pix=idx_pix,
             k_mtm=k_mtm,
             seed=seed,
-            std_correction=self.std_correction,
         )  # (n_pix, self.k_mtm, D)
 
         return samples

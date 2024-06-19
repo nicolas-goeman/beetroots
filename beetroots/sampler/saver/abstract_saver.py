@@ -194,20 +194,32 @@ class Saver:
                 os.path.join(self.results_path, "mc_chains.hdf5"),
                 "w",
             ) as f:
-                for k, v in self.memory.items():
-                    f.create_dataset(k, data=v, maxshape=(None,) + v.shape[1:])
+                def save_dict_to_hdf5(file, d, parent_key=''):
+                    for k, v in d.items():
+                        if isinstance(v, dict):
+                            save_dict_to_hdf5(file, v, parent_key + '/' + k)
+                        else:
+                            file.create_dataset(parent_key + '/' + k, data=v, maxshape=(None,) + v.shape[1:])
+                
+                save_dict_to_hdf5(f, self.memory)
 
         else:  # append data to already created file
             with h5py.File(
                 os.path.join(self.results_path, "mc_chains.hdf5"),
                 "a",
             ) as f:
-                for k, v in self.memory.items():
-                    f[k].resize(
-                        f[k].shape[0] + self.final_next_batch_size,
-                        axis=0,
-                    )
-                    f[k][-self.final_next_batch_size :] = v
+                def append_dict_to_hdf5(file, d, parent_key=''):
+                    for k, v in d.items():
+                        if isinstance(v, dict):
+                            append_dict_to_hdf5(file, v, parent_key + '/' + k)
+                        else:
+                            file[parent_key + '/' + k].resize(
+                                file[parent_key + '/' + k].shape[0] + self.final_next_batch_size,
+                                axis=0,
+                            )
+                            file[parent_key + '/' + k][-self.final_next_batch_size :] = v
+                
+                append_dict_to_hdf5(f, self.memory)
 
         self.memory = dict()
 

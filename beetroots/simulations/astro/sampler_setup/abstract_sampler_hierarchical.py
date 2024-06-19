@@ -158,8 +158,13 @@ class SimulationHierarchical(SimulationTargetDistributionType):
             "indicator_margin_scale": params_component_distributions["theta_indicator_prior"]['params']['indicator_margin_scale']
             }
         
-        proposal_distribution_params_aux = proposal_distribution_params_theta.copy()
-        proposal_distribution_params_aux.update({'weights': False,})
+        proposal_distribution_params_aux = {
+            "list_edges": list_edges,
+            "weights": 1/xp.var(y, axis=0),
+            "upper_bounds": xp.full(y.shape[-1], fill_value=xp.inf),
+            "lower_bounds": xp.zeros(y.shape[-1]),
+            "indicator_margin_scale": params_component_distributions["theta_indicator_prior"]['params']['indicator_margin_scale']
+            }
         
         kwargs_proposal_distributions = {
             "full_conditional_theta": proposal_distribution_params_theta,

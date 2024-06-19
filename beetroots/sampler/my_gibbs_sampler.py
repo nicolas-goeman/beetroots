@@ -147,6 +147,8 @@ class MyGibbsSampler(Sampler):
                 self.current,
                 idx_pix=None,
                 compute_derivatives=False,
+                compute_derivatives_2nd_order=False,
+                mtm=False
             )
             nll_y_rep_full = likelihood_rep.neglog_pdf(
                 full=True,
@@ -570,12 +572,18 @@ class MyGibbsSampler(Sampler):
             candidate_pixel = new_var * 1
             candidate_pixel[idx_pix, :] = mu_current * 1
 
+            if key == 'full_conditional_auxiliary': # FIXME: temporary solution!!
+                candidate_pixel = xp.maximum(candidate_pixel, 1e-9) # Ensure that the auxiliary variable is positive.
+
             current_candidate[key] = {'var': candidate_pixel}
             target_distribution.update_nlpdf_utils(current_candidate, idx_pix, compute_derivatives=True, compute_derivatives_2nd_order=self.compute_correction_term)
             candidate_all = {}
             candidate_all['objective_pix'] = target_distribution.neglog_pdf(pixelwise=True, update_nlpdf_utils=False, idx_pix=idx_pix)
             candidate_all['grad'] = target_distribution.grad_neglog_pdf(update_nlpdf_utils=False, idx_pix=idx_pix) # (N, D)
             candidate_all["hess_diag"] = target_distribution.hess_diag_neglog_pdf(update_nlpdf_utils=False, idx_pix=idx_pix) if self.compute_correction_term else None# (N, D)
+
+            assert xp.isnan(candidate_all["objective_pix"]).sum() == 0
+            assert xp.isnan(candidate_all["grad"]).sum() == 0
 
             grad_cand = candidate_all["grad"] * 1
             v_cand = (
@@ -714,6 +722,7 @@ class MyGibbsSampler(Sampler):
 
             # --- COMPUTE WEIGHTS (USING LOG)
             # Compute neglogpdf of candidates
+
             current_candidates[key] = {'var': candidates}
             
             target_distribution.update_nlpdf_utils(current_candidates, idx_pix, compute_derivatives=False, compute_derivatives_2nd_order=False, mtm=True) # TODO: add the possibility to pass the idx_pix to the neglog_pdf method, improves the performance.
