@@ -7,6 +7,7 @@ import numba as nb
 #     decorator_nb = nb.cuda.jit
 # except:
 import numpy as xp
+from scipy.stats import norm
 decorator_nb = nb.njit
 
 from scipy.special import gamma, ndtr
@@ -196,72 +197,28 @@ def sample_conditional_spatial_and_indicator_prior(
                 used_neighbors = neighbors[arr_use_neighbors == 1]
                 N_used_neighbors = used_neighbors.shape[0]
 
+                # initialize array of candidates (from the untrucated Gaussian mixture)
+
                 # sigma_mtm_eff = 1 / (2 * xp.sqrt(N_neighbors * spatial_weights))  # (D,)
                 sigma_mtm_eff = 1 / (
                     2 * xp.sqrt(N_used_neighbors * spatial_weights)
                 )  # (D,)
 
-                # initialize array of candidates
-                mean = xp.zeros((1, D))
+                mean = xp.zeros(D)
                 for d in range(D):
-                    mean[0, d] = xp.mean(used_neighbors[:, d])
+                    mean[d] = xp.mean(used_neighbors[:, d])
                     # mean[d] = xp.mean(neighbors[:, d])
 
-                repeat = True
-                n_repeats = 0
-                n_repeats_tot = 0
-                while repeat:
-                    # * step 1 : generate candidates from spatial prior only
-                    Theta_cand = mean + sigma_mtm_eff * xp.random.standard_normal(
-                        size=(1, D)
-                    )
-
-                    # * step 2 : accept or reject with combination of spatial
-                    # * and indicator priors
-                    p_Theta = xp.exp(
-                        -smooth_indicator_prior.penalty_one_pix(
-                            Theta_cand,
-                            indicator_lower_bounds,
-                            indicator_upper_bounds,
-                            indicator_margin_scale,
-                        ).sum(axis=1)   
-                    )  # (1,)
-                    u = xp.random.uniform(0, 1)
-                    if u <= p_Theta[0]:
-                        Theta[k] += Theta_cand[0]
-                        repeat = False
-
-                    n_repeats += 1
-                    n_repeats_tot += 1
-
-                    if n_repeats >= 10:
-                        # select which combination f neighbors is going to be used
-                        arr_use_neighbors = xp.random.binomial(
-                            n=1, p=0.5, size=N_neighbors
-                        )
-                        while xp.max(arr_use_neighbors) == 0:
-                            arr_use_neighbors = xp.random.binomial(
-                                n=1, p=0.5, size=N_neighbors
-                            )
-
-                        used_neighbors = neighbors[arr_use_neighbors == 1]
-                        N_used_neighbors = used_neighbors.shape[0]
-
-                        # sigma_mtm_eff = 1 / (2 * xp.sqrt(N_neighbors * spatial_weights))  # (D,)
-                        sigma_mtm_eff = 1 / (
-                            2 * xp.sqrt(N_used_neighbors * spatial_weights)
-                        )  # (D,)
-
-                        # initialize array of candidates
-
-                        mean = xp.zeros((1, D))
-                        for d in range(D):
-                            mean[0, d] = xp.mean(used_neighbors[:, d])
-                            # mean[d] = xp.mean(neighbors[:, d])
-
-                        n_repeats = 0
-
-                    assert n_repeats_tot < 1_000
+                # * sample a float between 0 and 1
+                u = xp.random.uniform(0, 1, 1)
+                # * generate candidates
+                q_lower = xp.zeros(D)
+                q_upper = xp.zeros(D)
+                for d in range(D):
+                    q_lower[d] = norm.cdf(indicator_lower_bounds[d], loc=mean[d], scale=sigma_mtm_eff[d])
+                    q_upper[d] = norm.cdf(indicator_upper_bounds[d], loc=mean[d], scale=sigma_mtm_eff[d])
+                    z = q_lower[d] + u*(q_upper[d] - q_lower[d])
+                    Theta[k, d] = norm.ppf(z, loc=mean[d], scale=sigma_mtm_eff[d])
 
             samples[i, :, :] = Theta * 1  # (k_mtm, D)
 
