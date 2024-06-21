@@ -661,7 +661,7 @@ class MyGibbsSampler(Sampler):
             )
             self.j_t[key] = j.flatten()
 
-            if accept_arr.max() > 0 and i<len(list_idx)-1:  # if at least one accept and not the last site group
+            if accept_arr.max() > 0:  # if at least one accept and not the last site group
                 # update the current variable for the next site group
                 self.current[key]['var'] = new_var * 1
                 self.current[key] = target_distribution.compute_all(
